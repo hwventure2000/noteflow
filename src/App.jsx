@@ -78,7 +78,7 @@ function AuthScreen({ c, s }) {
   };
 
   return (
-    <div style={{ display: "flex", height: "100vh", background: c.bg, alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans','Segoe UI',sans-serif" }}>
+    <div style={{ display: "flex", height: "100vh", width: "100vw", position: "fixed", top: 0, left: 0, background: c.bg, alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans','Segoe UI',sans-serif" }}>
       <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 20, padding: 36, width: "100%", maxWidth: 380 }}>
         <div style={{ fontSize: 24, fontWeight: 800, color: c.accent, letterSpacing: "-0.5px", marginBottom: 4 }}>📋 NoteFlow</div>
         <div style={{ fontSize: 13, color: c.muted, marginBottom: 28 }}>

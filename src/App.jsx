@@ -413,7 +413,7 @@ export default function NoteApp() {
 
   // ── Styles ────────────────────────────────────────────────────────────────────
   const s = {
-    app: { display: "flex", height: "100vh", background: c.bg, color: c.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", overflow: "hidden", fontSize: 14 },
+    app: { display: "flex", height: "100vh", width: "100vw",  background: c.bg, color: c.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", overflow: "hidden", fontSize: 14 },
     sidebar: { width: 220, minWidth: 220, background: c.sidebar, borderRight: `1px solid ${c.border}`, display: "flex", flexDirection: "column" },
     tabRow: (active, dragOver) => ({ display: "flex", alignItems: "center", padding: "9px 16px", fontSize: 13.5, fontWeight: active ? 600 : 400, color: active ? c.accent : c.text, background: active ? c.accentSoft : dragOver ? c.accentSoft + "99" : "transparent", borderLeft: `3px solid ${active ? c.accent : dragOver ? c.accent + "88" : "transparent"}`, transition: "all 0.13s", userSelect: "none", gap: 6 }),
     main: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" },

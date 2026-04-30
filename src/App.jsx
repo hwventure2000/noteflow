@@ -129,64 +129,70 @@ function AuthScreen({ c, s }) {
 
 // ── Reminder Picker ───────────────────────────────────────────────────────────
 function ReminderPicker({ value, onChange, s, c }) {
-  // value is ISO string like "2025-06-15T14:30" or ""
   const parse = (v) => {
     if (!v) return { date: "", hour: "12", minute: "00", ampm: "AM" };
     const d = new Date(v);
     if (isNaN(d)) return { date: "", hour: "12", minute: "00", ampm: "AM" };
     const h24 = d.getHours();
-    const ampm = h24 >= 12 ? "PM" : "AM";
-    const hour = String(h24 % 12 === 0 ? 12 : h24 % 12);
-    const minute = String(d.getMinutes()).padStart(2, "0");
-    const date = v.slice(0, 10);
-    return { date, hour, minute, ampm };
+    return {
+      date: v.slice(0, 10),
+      hour: String(h24 % 12 === 0 ? 12 : h24 % 12),
+      minute: String(d.getMinutes()).padStart(2, "0"),
+      ampm: h24 >= 12 ? "PM" : "AM",
+    };
   };
 
-  const { date, hour, minute, ampm } = parse(value);
+  const parsed = parse(value);
+  // Local draft state for the minute box so typing isn't interrupted
+  const [minDraft, setMinDraft] = useState(parsed.minute);
+  // Keep draft in sync when the value changes from outside
+  useEffect(() => { setMinDraft(parse(value).minute); }, [value]);
 
   const emit = (d, h, m, ap) => {
     if (!d) { onChange(""); return; }
     let h24 = parseInt(h, 10) % 12;
     if (ap === "PM") h24 += 12;
     const pad = (n) => String(n).padStart(2, "0");
-    onChange(`${d}T${pad(h24)}:${m}`);
+    onChange(`${d}T${pad(h24)}:${pad(parseInt(m, 10) || 0)}`);
+  };
+
+  const commitMinute = (raw) => {
+    const val = parseInt(raw, 10);
+    const clamped = isNaN(val) ? 0 : Math.min(59, Math.max(0, val));
+    const padded = String(clamped).padStart(2, "0");
+    setMinDraft(padded);
+    emit(parsed.date, parsed.hour, padded, parsed.ampm);
   };
 
   const hours = Array.from({ length: 12 }, (_, i) => String(i + 1));
 
   return (
     <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-      {/* date input — inject accent color for the calendar icon */}
       <style>{`input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(55%) sepia(60%) saturate(600%) hue-rotate(220deg); cursor: pointer; }`}</style>
       <input
         type="date"
         style={{ ...s.inp, flex: "1 1 130px", minWidth: 130 }}
-        value={date}
-        onChange={e => emit(e.target.value, hour, minute, ampm)}
+        value={parsed.date}
+        onChange={e => emit(e.target.value, parsed.hour, parsed.minute, parsed.ampm)}
       />
       <select
         style={{ ...s.inp, width: 70 }}
-        value={hour}
-        onChange={e => emit(date, e.target.value, minute, ampm)}
+        value={parsed.hour}
+        onChange={e => emit(parsed.date, e.target.value, parsed.minute, parsed.ampm)}
       >
         {hours.map(h => <option key={h} value={h}>{h}</option>)}
       </select>
       <span style={{ color: c.muted, fontWeight: 700 }}>:</span>
-      {/* free-type minute input */}
+      {/* uncontrolled-style minute box: local draft, commits on blur or Enter */}
       <input
         type="text"
+        inputMode="numeric"
         maxLength={2}
         style={{ ...s.inp, width: 56, textAlign: "center" }}
-        value={minute}
-        onChange={e => {
-          const raw = e.target.value.replace(/\D/g, "").slice(0, 2);
-          emit(date, hour, raw || "00", ampm);
-        }}
-        onBlur={e => {
-          const val = parseInt(e.target.value, 10);
-          const clamped = isNaN(val) ? 0 : Math.min(59, Math.max(0, val));
-          emit(date, hour, String(clamped).padStart(2, "0"), ampm);
-        }}
+        value={minDraft}
+        onChange={e => setMinDraft(e.target.value.replace(/\D/g, "").slice(0, 2))}
+        onBlur={e => commitMinute(e.target.value)}
+        onKeyDown={e => { if (e.key === "Enter") commitMinute(e.target.value); }}
         placeholder="00"
       />
       <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: `1px solid ${c.inputBorder}` }}>

@@ -154,11 +154,6 @@ function ReminderPicker({ value, onChange, s, c }) {
 
   const hours = Array.from({ length: 12 }, (_, i) => String(i + 1));
 
-  const handleMinuteChange = (raw) => {
-    const clamped = Math.min(59, Math.max(0, parseInt(raw, 10) || 0));
-    emit(date, hour, String(clamped).padStart(2, "0"), ampm);
-  };
-
   return (
     <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
       {/* date input — inject accent color for the calendar icon */}
@@ -177,15 +172,21 @@ function ReminderPicker({ value, onChange, s, c }) {
         {hours.map(h => <option key={h} value={h}>{h}</option>)}
       </select>
       <span style={{ color: c.muted, fontWeight: 700 }}>:</span>
-      {/* free-type minute input, any value 0–59 */}
+      {/* free-type minute input */}
       <input
-        type="number"
-        min="0"
-        max="59"
-        style={{ ...s.inp, width: 64, textAlign: "center" }}
+        type="text"
+        maxLength={2}
+        style={{ ...s.inp, width: 56, textAlign: "center" }}
         value={minute}
-        onChange={e => handleMinuteChange(e.target.value)}
-        onBlur={e => handleMinuteChange(e.target.value)}
+        onChange={e => {
+          const raw = e.target.value.replace(/\D/g, "").slice(0, 2);
+          emit(date, hour, raw || "00", ampm);
+        }}
+        onBlur={e => {
+          const val = parseInt(e.target.value, 10);
+          const clamped = isNaN(val) ? 0 : Math.min(59, Math.max(0, val));
+          emit(date, hour, String(clamped).padStart(2, "0"), ampm);
+        }}
         placeholder="00"
       />
       <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: `1px solid ${c.inputBorder}` }}>

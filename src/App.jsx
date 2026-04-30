@@ -49,6 +49,28 @@ If it contains MULTIPLE distinct notes or items, return: {"type":"multi","notes"
   } catch { return null; }
 }
 
+// ── Chime sound via Web Audio API ─────────────────────────────────────────────
+function playChime() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const notes = [523.25, 659.25, 783.99, 1046.50]; // C5 E5 G5 C6
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const start = ctx.currentTime + i * 0.18;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.28, start + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.5);
+      osc.start(start);
+      osc.stop(start + 0.5);
+    });
+  } catch (e) { /* silently fail if audio not available */ }
+}
+
 let _dragNoteId = null;
 
 // ── Auth Screen ───────────────────────────────────────────────────────────────
@@ -105,6 +127,81 @@ function AuthScreen({ c, s }) {
   );
 }
 
+// ── Reminder Picker ───────────────────────────────────────────────────────────
+function ReminderPicker({ value, onChange, s, c }) {
+  // value is ISO string like "2025-06-15T14:30" or ""
+  const parse = (v) => {
+    if (!v) return { date: "", hour: "12", minute: "00", ampm: "AM" };
+    const d = new Date(v);
+    if (isNaN(d)) return { date: "", hour: "12", minute: "00", ampm: "AM" };
+    const h24 = d.getHours();
+    const ampm = h24 >= 12 ? "PM" : "AM";
+    const hour = String(h24 % 12 === 0 ? 12 : h24 % 12);
+    const minute = String(d.getMinutes()).padStart(2, "0");
+    const date = v.slice(0, 10);
+    return { date, hour, minute, ampm };
+  };
+
+  const { date, hour, minute, ampm } = parse(value);
+
+  const emit = (d, h, m, ap) => {
+    if (!d) { onChange(""); return; }
+    let h24 = parseInt(h, 10) % 12;
+    if (ap === "PM") h24 += 12;
+    const pad = (n) => String(n).padStart(2, "0");
+    onChange(`${d}T${pad(h24)}:${m}`);
+  };
+
+  const hours = Array.from({ length: 12 }, (_, i) => String(i + 1));
+  const minutes = ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"];
+
+  return (
+    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+      <input
+        type="date"
+        style={{ ...s.inp, flex: "1 1 130px", minWidth: 130 }}
+        value={date}
+        onChange={e => emit(e.target.value, hour, minute, ampm)}
+      />
+      <select
+        style={{ ...s.inp, width: 70 }}
+        value={hour}
+        onChange={e => emit(date, e.target.value, minute, ampm)}
+      >
+        {hours.map(h => <option key={h} value={h}>{h}</option>)}
+      </select>
+      <span style={{ color: c.muted, fontWeight: 700 }}>:</span>
+      <select
+        style={{ ...s.inp, width: 70 }}
+        value={minute}
+        onChange={e => emit(date, hour, e.target.value, ampm)}
+      >
+        {minutes.map(m => <option key={m} value={m}>{m}</option>)}
+      </select>
+      <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: `1px solid ${c.inputBorder}` }}>
+        {["AM", "PM"].map(ap => (
+          <button
+            key={ap}
+            type="button"
+            onClick={() => emit(date, hour, minute, ap)}
+            style={{
+              padding: "7px 13px", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
+              background: ampm === ap ? c.accent : c.input,
+              color: ampm === ap ? "#fff" : c.muted,
+              transition: "all 0.15s",
+            }}
+          >
+            {ap}
+          </button>
+        ))}
+      </div>
+      {value && (
+        <button type="button" onClick={() => onChange("")} style={{ ...s.iconBtn(c.muted), fontSize: 12 }}>✕</button>
+      )}
+    </div>
+  );
+}
+
 // ── Main App ──────────────────────────────────────────────────────────────────
 export default function NoteApp() {
   const [dark, setDark] = useState(true);
@@ -128,7 +225,9 @@ export default function NoteApp() {
   const [noteModal, setNoteModal] = useState(null);
   const [shareModal, setShareModal] = useState(null);
   const [historyModal, setHistoryModal] = useState(null);
+  const [reminderAlerts, setReminderAlerts] = useState([]); // [{id, noteId, title}]
   const [addTabModal, setAddTabModal] = useState(false);
+  const [addTabFromNote, setAddTabFromNote] = useState(false);
   const [newTabName, setNewTabName] = useState("");
   const [editingTabId, setEditingTabId] = useState(null);
   const [editingTabName, setEditingTabName] = useState("");
@@ -149,6 +248,7 @@ export default function NoteApp() {
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const recognitionRef = useRef(null);
+  const firedReminders = useRef(new Set());
 
   // ── Auth ──────────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -188,17 +288,22 @@ export default function NoteApp() {
   };
 
   // ── Categories CRUD ───────────────────────────────────────────────────────────
-  const addTab = async () => {
+  const addTab = async (fromNote = false) => {
     if (!newTabName.trim()) return;
     const pos = categories.length;
     const { data } = await sb.from("categories").insert({ label: newTabName.trim(), position: pos, user_id: session.user.id }).select().single();
-    if (data) setCategories(cats => {
-      const arr = [...cats];
-      arr.splice(arr.length, 0, data);
-      return arr;
-    });
-    setNewTabName(""); setAddTabModal(false);
+    if (data) {
+      setCategories(cats => [...cats, data]);
+      if (fromNote) {
+        // auto-select the new category in the note form
+        setForm(f => ({ ...f, tabs: [...f.tabs, data.id] }));
+      }
+    }
+    setNewTabName("");
+    setAddTabModal(false);
+    setAddTabFromNote(false);
   };
+
   const removeTab = async (id) => {
     await sb.from("categories").delete().eq("id", id);
     setCategories(cats => cats.filter(c => c.id !== id));
@@ -251,7 +356,6 @@ export default function NoteApp() {
       const { data: newNote } = await sb.from("notes").insert({ ...payload, position: 0 }).select().single();
       if (newNote) {
         await sb.from("note_history").insert({ note_id: newNote.id, user_id: session.user.id, action: "Created note" });
-        // upload attachments
         const atts = [];
         for (const att of form.attachments) {
           if (att.base64) {
@@ -370,6 +474,27 @@ export default function NoteApp() {
   };
   useEffect(() => () => streamRef.current?.getTracks().forEach(t => t.stop()), []);
 
+  // ── Reminder polling ───────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!session) return;
+    const check = () => {
+      const now = Date.now();
+      notes.forEach(note => {
+        if (!note.reminder || note.trashed || note.completed) return;
+        const reminderTs = new Date(note.reminder).getTime();
+        // fire if reminder is within the last 30s window and hasn't fired yet
+        if (reminderTs <= now && reminderTs > now - 30000 && !firedReminders.current.has(note.id)) {
+          firedReminders.current.add(note.id);
+          playChime();
+          setReminderAlerts(prev => [...prev, { alertId: `${note.id}-${reminderTs}`, noteId: note.id, title: note.title, body: note.body }]);
+        }
+      });
+    };
+    check(); // run immediately on mount/notes change
+    const interval = setInterval(check, 30000);
+    return () => clearInterval(interval);
+  }, [notes, session]);
+
   // ── Sharing ───────────────────────────────────────────────────────────────────
   const generateLink = async (id) => {
     const link = `${window.location.origin}/shared/${id}?token=${uid()}`;
@@ -387,6 +512,16 @@ export default function NoteApp() {
   const removeInvite = async (id, email) => {
     await sb.from("note_shares").delete().eq("note_id", id).eq("email", email);
     setNotes(ns => ns.map(n => n.id === id ? { ...n, sharedWith: n.sharedWith.filter(s => s.email !== email) } : n));
+  };
+
+  // ── Reminder alert handlers ───────────────────────────────────────────────
+  const dismissAlert = (alertId) => setReminderAlerts(prev => prev.filter(a => a.alertId !== alertId));
+  const snoozeAlert = (alertId, noteId) => {
+    dismissAlert(alertId);
+    // snooze 10 min: update reminder on the note to now+10min, allow it to re-fire
+    const newReminder = new Date(Date.now() + 10 * 60 * 1000).toISOString().slice(0, 16);
+    firedReminders.current.delete(noteId);
+    updateNote(noteId, { reminder: newReminder }, null);
   };
 
   // ── Filter & sort ─────────────────────────────────────────────────────────────
@@ -431,8 +566,8 @@ export default function NoteApp() {
     mbox: { background: c.card, border: `1px solid ${c.border}`, borderRadius: 18, padding: 24, width: "100%", maxWidth: 540, maxHeight: "90vh", overflowY: "auto" },
     inp: { width: "100%", background: c.input, border: `1px solid ${c.inputBorder}`, borderRadius: 9, padding: "9px 12px", color: c.text, fontSize: 13.5, outline: "none", boxSizing: "border-box" },
     ta: { width: "100%", background: c.input, border: `1px solid ${c.inputBorder}`, borderRadius: 9, padding: "9px 12px", color: c.text, fontSize: 13.5, outline: "none", boxSizing: "border-box", resize: "vertical", minHeight: 72, fontFamily: "inherit" },
-    lbl: { fontSize: 11, fontWeight: 700, color: c.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5, display: "block" },
-    tag: { display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 9px", borderRadius: 20, background: c.tag, color: c.tagText, fontSize: 11.5, fontWeight: 500 },
+    // ── CHANGE #5: bigger, clearer form labels ─────────────────────────────────
+    lbl: { fontSize: 13, fontWeight: 700, color: c.text, letterSpacing: "0.01em", marginBottom: 7, display: "block" },
     div: { height: 1, background: c.border, margin: "10px 0" },
     badge: (col) => ({ background: col || c.accent, color: "#fff", borderRadius: 20, padding: "1px 7px", fontSize: 11, fontWeight: 600, flexShrink: 0 }),
     mediaPill: (hover) => ({ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 20px", borderRadius: 50, border: `1.5px solid ${hover ? c.accent : c.inputBorder}`, background: hover ? c.accentSoft : c.input, color: hover ? c.accent : c.text, cursor: "pointer", fontSize: 13.5, fontWeight: 500, transition: "all 0.15s", userSelect: "none" }),
@@ -576,7 +711,8 @@ export default function NoteApp() {
             <NoteForm form={form} setForm={setForm} s={s} c={c} tabs={tabs} listening={listening}
               startListening={startListening} ocrLoading={ocrLoading} ocrPreview={ocrPreview}
               fileRef={fileRef} ocrFileRef={ocrFileRef} handleFiles={handleFiles}
-              handleOcrFile={handleOcrFile} openCamera={openCamera} dropActive={dropActive} setDropActive={setDropActive} />
+              handleOcrFile={handleOcrFile} openCamera={openCamera} dropActive={dropActive} setDropActive={setDropActive}
+              onAddCategory={() => { setAddTabFromNote(true); setAddTabModal(true); }} />
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 20 }}>
               <button style={s.btn("ghost")} onClick={() => setNoteModal(null)}>Cancel</button>
               <button style={s.btn("primary")} onClick={saveNote}>Save Note</button>
@@ -683,33 +819,106 @@ export default function NoteApp() {
 
       {/* ── add category modal ── */}
       {addTabModal && (
-        <div style={s.modal} onClick={() => setAddTabModal(false)}>
+        <div style={{ ...s.modal, zIndex: 300 }} onClick={() => { setAddTabModal(false); setAddTabFromNote(false); setNewTabName(""); }}>
           <div style={{ ...s.mbox, maxWidth: 320 }} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 14 }}>Add Category</div>
-            <input style={s.inp} placeholder="e.g. Finance, Sarah, Legal…" value={newTabName} onChange={e => setNewTabName(e.target.value)} onKeyDown={e => e.key === "Enter" && addTab()} autoFocus />
+            <input style={s.inp} placeholder="e.g. Finance, Sarah, Legal…" value={newTabName} onChange={e => setNewTabName(e.target.value)} onKeyDown={e => e.key === "Enter" && addTab(addTabFromNote)} autoFocus />
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
-              <button style={s.btn("ghost")} onClick={() => setAddTabModal(false)}>Cancel</button>
-              <button style={s.btn("primary")} onClick={addTab}>Add</button>
+              <button style={s.btn("ghost")} onClick={() => { setAddTabModal(false); setAddTabFromNote(false); setNewTabName(""); }}>Cancel</button>
+              <button style={s.btn("primary")} onClick={() => addTab(addTabFromNote)}>Add</button>
             </div>
           </div>
         </div>
       )}
+
+      {/* ── reminder alert banners ── */}
+      <div style={{ position: "fixed", top: 20, right: 20, zIndex: 9999, display: "flex", flexDirection: "column", gap: 10, maxWidth: 360, width: "calc(100vw - 40px)" }}>
+        {reminderAlerts.map(alert => (
+          <ReminderBanner
+            key={alert.alertId}
+            alert={alert}
+            c={c}
+            onDismiss={() => dismissAlert(alert.alertId)}
+            onSnooze={() => snoozeAlert(alert.alertId, alert.noteId)}
+            onOpen={() => { dismissAlert(alert.alertId); const note = notes.find(n => n.id === alert.noteId); if (note) openEdit(note); }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Reminder Banner ───────────────────────────────────────────────────────────
+function ReminderBanner({ alert, c, onDismiss, onSnooze, onOpen }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    // small delay so the CSS transition plays on mount
+    const t = setTimeout(() => setVisible(true), 30);
+    return () => clearTimeout(t);
+  }, []);
+
+  const dismiss = () => { setVisible(false); setTimeout(onDismiss, 300); };
+  const snooze = () => { setVisible(false); setTimeout(onSnooze, 300); };
+  const open = () => { setVisible(false); setTimeout(onOpen, 300); };
+
+  return (
+    <div style={{
+      background: c.card,
+      border: `1.5px solid ${c.accent}`,
+      borderRadius: 16,
+      padding: "14px 16px",
+      boxShadow: `0 8px 32px rgba(0,0,0,0.35), 0 0 0 1px ${c.accent}33`,
+      transform: visible ? "translateX(0)" : "translateX(120%)",
+      opacity: visible ? 1 : 0,
+      transition: "transform 0.3s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease",
+      display: "flex",
+      flexDirection: "column",
+      gap: 10,
+    }}>
+      {/* header row */}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+        <div style={{ fontSize: 22, lineHeight: 1, flexShrink: 0, marginTop: 1 }}>⏰</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 3 }}>Reminder</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: c.text, lineHeight: 1.3 }}>{alert.title}</div>
+          {alert.body && (
+            <div style={{ fontSize: 12.5, color: c.muted, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+              {alert.body}
+            </div>
+          )}
+        </div>
+        <button onClick={dismiss} style={{ background: "none", border: "none", cursor: "pointer", color: c.muted, padding: 2, flexShrink: 0, fontSize: 16, lineHeight: 1 }}>✕</button>
+      </div>
+      {/* action row */}
+      <div style={{ display: "flex", gap: 7 }}>
+        <button onClick={open} style={{ flex: 1, padding: "7px 0", background: c.accent, color: "#fff", border: "none", borderRadius: 9, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+          Open Note
+        </button>
+        <button onClick={snooze} style={{ flex: 1, padding: "7px 0", background: c.accentSoft, color: c.accent, border: "none", borderRadius: 9, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+          Snooze 10 min
+        </button>
+        <button onClick={dismiss} style={{ padding: "7px 12px", background: "none", color: c.muted, border: `1px solid ${c.border}`, borderRadius: 9, fontSize: 12.5, fontWeight: 500, cursor: "pointer" }}>
+          Dismiss
+        </button>
+      </div>
     </div>
   );
 }
 
 // ── NoteForm ──────────────────────────────────────────────────────────────────
-function NoteForm({ form, setForm, s, c, tabs, listening, startListening, ocrLoading, ocrPreview, fileRef, ocrFileRef, handleFiles, handleOcrFile, openCamera, dropActive, setDropActive }) {
+function NoteForm({ form, setForm, s, c, tabs, listening, startListening, ocrLoading, ocrPreview, fileRef, ocrFileRef, handleFiles, handleOcrFile, openCamera, dropActive, setDropActive, onAddCategory }) {
   const [uploadHover, setUploadHover] = useState(false);
   const [cameraHover, setCameraHover] = useState(false);
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div>
+        {/* CHANGE #5: bigger label */}
         <label style={s.lbl}>Title</label>
-        <input style={s.inp} placeholder="Note title…" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
+        {/* CHANGE #3: autoFocus so cursor lands here immediately */}
+        <input autoFocus style={s.inp} placeholder="Note title…" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
       </div>
       <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
           <label style={{ ...s.lbl, marginBottom: 0 }}>Body</label>
           <button style={{ ...s.btn(listening ? "primary" : "ghost"), padding: "4px 9px", fontSize: 11.5 }} onClick={startListening}>
             <Ico d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3zM19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8" size={13} /> {listening ? "Listening…" : "Dictate"}
@@ -718,7 +927,7 @@ function NoteForm({ form, setForm, s, c, tabs, listening, startListening, ocrLoa
         <textarea style={s.ta} placeholder="Write your note…" value={form.body} onChange={e => setForm(f => ({ ...f, body: e.target.value }))} />
       </div>
       <div>
-        <label style={s.lbl}>Add from image</label>
+        <label style={s.lbl}>Add from Image</label>
         <div style={{ display: "flex", gap: 10 }}>
           <div style={{ ...s.mediaPill(uploadHover), flex: 1, justifyContent: "center" }}
             onMouseEnter={() => setUploadHover(true)} onMouseLeave={() => setUploadHover(false)}
@@ -738,22 +947,37 @@ function NoteForm({ form, setForm, s, c, tabs, listening, startListening, ocrLoa
         {ocrPreview && <img src={ocrPreview} alt="scanned" style={{ marginTop: 8, maxHeight: 100, borderRadius: 8, border: `1px solid ${c.border}`, display: "block" }} />}
       </div>
       <div>
-        <label style={s.lbl}>Categories</label>
+        {/* CHANGE #4: "Add Category" button inline in the categories section */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
+          <label style={{ ...s.lbl, marginBottom: 0 }}>Categories</label>
+          <button
+            type="button"
+            onClick={onAddCategory}
+            style={{ ...s.btn("ghost"), padding: "3px 10px", fontSize: 12, border: `1px solid ${c.inputBorder}` }}
+          >
+            <Ico d="M12 5v14M5 12h14" size={12} /> New Category
+          </button>
+        </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-          {tabs.filter(t => !t.fixed).map(t => (
-            <label key={t.id} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13 }}>
-              <input type="checkbox" checked={form.tabs.includes(t.id)} onChange={e => setForm(f => ({ ...f, tabs: e.target.checked ? [...f.tabs, t.id] : f.tabs.filter(x => x !== t.id) }))} style={{ accentColor: c.accent }} />
-              {t.label}
-            </label>
-          ))}
+          {tabs.filter(t => !t.fixed).length === 0 ? (
+            <span style={{ fontSize: 12.5, color: c.muted }}>No categories yet — add one above.</span>
+          ) : (
+            tabs.filter(t => !t.fixed).map(t => (
+              <label key={t.id} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13.5 }}>
+                <input type="checkbox" checked={form.tabs.includes(t.id)} onChange={e => setForm(f => ({ ...f, tabs: e.target.checked ? [...f.tabs, t.id] : f.tabs.filter(x => x !== t.id) }))} style={{ accentColor: c.accent, width: 15, height: 15 }} />
+                {t.label}
+              </label>
+            ))
+          )}
         </div>
       </div>
-      <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, fontWeight: 500 }}>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13.5, fontWeight: 500 }}>
         <Star filled={form.priority} size={17} onClick={() => setForm(f => ({ ...f, priority: !f.priority }))} /> Priority
       </label>
       <div>
+        {/* CHANGE #8: AM/PM reminder picker replaces datetime-local */}
         <label style={s.lbl}>Reminder</label>
-        <input type="datetime-local" style={s.inp} value={form.reminder} onChange={e => setForm(f => ({ ...f, reminder: e.target.value }))} />
+        <ReminderPicker value={form.reminder} onChange={v => setForm(f => ({ ...f, reminder: v }))} s={s} c={c} />
       </div>
       <div>
         <label style={s.lbl}>Attachments</label>

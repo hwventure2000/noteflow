@@ -200,11 +200,11 @@ function ReminderPicker({ value, onChange, s, c }) {
           <button
             key={ap}
             type="button"
-            onClick={() => emit(date, hour, minute, ap)}
+            onClick={() => emit(parsed.date, parsed.hour, parsed.minute, ap)}
             style={{
               padding: "7px 13px", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-              background: ampm === ap ? c.accent : c.input,
-              color: ampm === ap ? "#fff" : c.muted,
+              background: parsed.ampm === ap ? c.accent : c.input,
+              color: parsed.ampm === ap ? "#fff" : c.muted,
               transition: "all 0.15s",
             }}
           >

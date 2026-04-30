@@ -237,7 +237,7 @@ export default function NoteApp() {
   const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
   const [view, setView] = useState("all");
-  const [sortOrder, setSortOrder] = useState("newToOld");
+  const [sortOrder, setSortOrder] = useState("manual");
   const [viewMode, setViewMode] = useState("grid");
   const [dragOverNoteId, setDragOverNoteId] = useState(null);
   const [draggingNoteId, setDraggingNoteId] = useState(null);

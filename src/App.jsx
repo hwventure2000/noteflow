@@ -153,10 +153,16 @@ function ReminderPicker({ value, onChange, s, c }) {
   };
 
   const hours = Array.from({ length: 12 }, (_, i) => String(i + 1));
-  const minutes = ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"];
+
+  const handleMinuteChange = (raw) => {
+    const clamped = Math.min(59, Math.max(0, parseInt(raw, 10) || 0));
+    emit(date, hour, String(clamped).padStart(2, "0"), ampm);
+  };
 
   return (
     <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+      {/* date input — inject accent color for the calendar icon */}
+      <style>{`input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(55%) sepia(60%) saturate(600%) hue-rotate(220deg); cursor: pointer; }`}</style>
       <input
         type="date"
         style={{ ...s.inp, flex: "1 1 130px", minWidth: 130 }}
@@ -171,13 +177,17 @@ function ReminderPicker({ value, onChange, s, c }) {
         {hours.map(h => <option key={h} value={h}>{h}</option>)}
       </select>
       <span style={{ color: c.muted, fontWeight: 700 }}>:</span>
-      <select
-        style={{ ...s.inp, width: 70 }}
+      {/* free-type minute input, any value 0–59 */}
+      <input
+        type="number"
+        min="0"
+        max="59"
+        style={{ ...s.inp, width: 64, textAlign: "center" }}
         value={minute}
-        onChange={e => emit(date, hour, e.target.value, ampm)}
-      >
-        {minutes.map(m => <option key={m} value={m}>{m}</option>)}
-      </select>
+        onChange={e => handleMinuteChange(e.target.value)}
+        onBlur={e => handleMinuteChange(e.target.value)}
+        placeholder="00"
+      />
       <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: `1px solid ${c.inputBorder}` }}>
         {["AM", "PM"].map(ap => (
           <button

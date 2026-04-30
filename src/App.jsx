@@ -165,6 +165,7 @@ function ReminderPicker({ value, onChange, s, c }) {
   };
 
   const hours = Array.from({ length: 12 }, (_, i) => String(i + 1));
+  const minuteRef = useRef(null);
 
   return (
     <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
@@ -178,19 +179,24 @@ function ReminderPicker({ value, onChange, s, c }) {
       <select
         style={{ ...s.inp, width: 70 }}
         value={parsed.hour}
-        onChange={e => emit(parsed.date, e.target.value, parsed.minute, parsed.ampm)}
+        onChange={e => {
+          emit(parsed.date, e.target.value, parsed.minute, parsed.ampm);
+          // auto-advance cursor to minute field
+          setTimeout(() => { minuteRef.current?.focus(); minuteRef.current?.select(); }, 0);
+        }}
       >
         {hours.map(h => <option key={h} value={h}>{h}</option>)}
       </select>
       <span style={{ color: c.muted, fontWeight: 700 }}>:</span>
-      {/* uncontrolled-style minute box: local draft, commits on blur or Enter */}
       <input
+        ref={minuteRef}
         type="text"
         inputMode="numeric"
         maxLength={2}
         style={{ ...s.inp, width: 56, textAlign: "center" }}
         value={minDraft}
         onChange={e => setMinDraft(e.target.value.replace(/\D/g, "").slice(0, 2))}
+        onFocus={e => e.target.select()}
         onBlur={e => commitMinute(e.target.value)}
         onKeyDown={e => { if (e.key === "Enter") commitMinute(e.target.value); }}
         placeholder="00"

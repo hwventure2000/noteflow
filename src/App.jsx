@@ -5,6 +5,9 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+const GOOGLE_CLIENT_ID = "1058845504956-5upmifce7rq89aqjka388ofrhl4652sj.apps.googleusercontent.com";
+const GCAL_SCOPES = "https://www.googleapis.com/auth/calendar.readonly";
+
 const uid = () => Math.random().toString(36).slice(2, 9);
 const nowTs = () => Date.now();
 const fmt = (ts) => new Date(ts).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -249,7 +252,11 @@ export default function NoteApp() {
   const [noteModal, setNoteModal] = useState(null);
   const [shareModal, setShareModal] = useState(null);
   const [historyModal, setHistoryModal] = useState(null);
-  const [reminderAlerts, setReminderAlerts] = useState([]); // [{id, noteId, title}]
+  const [reminderAlerts, setReminderAlerts] = useState([]);
+  const [gcalModal, setGcalModal] = useState(false);
+  const [gcalEvents, setGcalEvents] = useState([]);
+  const [gcalLoading, setGcalLoading] = useState(false);
+  const [gcalToken, setGcalToken] = useState(null); // [{id, noteId, title}]
   const [addTabModal, setAddTabModal] = useState(false);
   const [addTabFromNote, setAddTabFromNote] = useState(false);
   const [newTabName, setNewTabName] = useState("");
@@ -579,6 +586,87 @@ export default function NoteApp() {
     updateNote(noteId, { reminder: newReminder }, null);
   };
 
+  // ── Google Calendar ───────────────────────────────────────────────────────
+  const connectGoogleCalendar = () => {
+    const params = new URLSearchParams({
+      client_id: GOOGLE_CLIENT_ID,
+      redirect_uri: window.location.origin,
+      response_type: "token",
+      scope: GCAL_SCOPES,
+      prompt: "select_account",
+    });
+    const popup = window.open(`https://accounts.google.com/o/oauth2/v2/auth?${params}`, "gcal_auth", "width=500,height=600");
+    const timer = setInterval(() => {
+      try {
+        if (popup.closed) { clearInterval(timer); return; }
+        const hash = popup.location.hash;
+        if (hash && hash.includes("access_token")) {
+          clearInterval(timer);
+          popup.close();
+          const token = new URLSearchParams(hash.slice(1)).get("access_token");
+          setGcalToken(token);
+          fetchGcalEvents(token);
+        }
+      } catch (e) { /* cross-origin, keep polling */ }
+    }, 500);
+  };
+
+  const fetchGcalEvents = async (token) => {
+    setGcalLoading(true);
+    const now = new Date().toISOString();
+    const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${now}&timeMax=${future}&singleEvents=true&orderBy=startTime&maxResults=30`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json();
+    setGcalEvents(data.items || []);
+    setGcalLoading(false);
+    setGcalModal(true);
+  };
+
+  const importGcalEvent = async (event) => {
+    const start = event.start?.dateTime || event.start?.date;
+    const title = event.summary || "Calendar Event";
+    const location = event.location ? `📍 ${event.location}\n` : "";
+    const description = event.description ? `\n${event.description}` : "";
+    const body = `${location}${fmt(new Date(start).getTime())}${description}`.trim();
+    const reminder = event.start?.dateTime ? new Date(start).toISOString().slice(0, 16) : null;
+    const { data: newNote } = await sb.from("notes").insert({
+      title, body, priority: false, tabs: [], position: 0,
+      reminder, user_id: session.user.id,
+    }).select().single();
+    if (newNote) {
+      await sb.from("note_history").insert({ note_id: newNote.id, user_id: session.user.id, action: "Imported from Google Calendar" });
+      await loadNotes();
+    }
+  };
+
+  // ── .ics file drop handler ────────────────────────────────────────────────
+  const importIcsFile = async (file) => {
+    const text = await file.text();
+    const getValue = (key) => { const m = text.match(new RegExp(`${key}[^:]*:(.+)`)); return m ? m[1].trim() : ""; };
+    const title = getValue("SUMMARY") || "Calendar Event";
+    const dtstart = getValue("DTSTART");
+    const description = getValue("DESCRIPTION").replace(/\\n/g, "\n").replace(/\\,/g, ",");
+    const location = getValue("LOCATION");
+    let reminder = null;
+    if (dtstart) {
+      const y = dtstart.slice(0,4), mo = dtstart.slice(4,6), d = dtstart.slice(6,8);
+      const h = dtstart.slice(9,11) || "00", mi = dtstart.slice(11,13) || "00";
+      reminder = `${y}-${mo}-${d}T${h}:${mi}`;
+    }
+    const bodyParts = [location && `📍 ${location}`, reminder && fmt(new Date(reminder).getTime()), description].filter(Boolean);
+    const { data: newNote } = await sb.from("notes").insert({
+      title, body: bodyParts.join("\n"), priority: false, tabs: [],
+      position: 0, reminder, user_id: session.user.id,
+    }).select().single();
+    if (newNote) {
+      await sb.from("note_history").insert({ note_id: newNote.id, user_id: session.user.id, action: "Imported from .ics file" });
+      await loadNotes();
+      alert(`✅ "${title}" imported as a note!`);
+    }
+  };
+
   // ── Filter & sort ─────────────────────────────────────────────────────────────
   const countForTab = (tabId) => {
     if (tabId === "uncategorized") return notes.filter(n => !n.completed && !n.trashed && n.tabs.length === 0).length;
@@ -707,6 +795,15 @@ export default function NoteApp() {
         </div>
 
         <div style={{ padding: "10px 14px", borderTop: `1px solid ${c.border}`, display: "flex", flexDirection: "column", gap: 6 }}>
+          <button style={{ ...s.btn("ghost"), width: "100%", justifyContent: "center", fontSize: 12 }} onClick={connectGoogleCalendar}>
+            <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Google Calendar
+          </button>
+          <label style={{ ...s.btn("ghost"), width: "100%", justifyContent: "center", fontSize: 12, cursor: "pointer" }}>
+            <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Import .ics (Apple)
+            <input type="file" accept=".ics" style={{ display: "none" }} onChange={e => { if (e.target.files[0]) importIcsFile(e.target.files[0]); e.target.value = ""; }} />
+          </label>
           <button style={{ ...s.btn("ghost"), width: "100%", justifyContent: "center", fontSize: 12 }} onClick={() => setDark(d => !d)}>
             <Ico d={dark ? "M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42M12 5a7 7 0 100 14A7 7 0 0012 5z" : "M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"} />
             {dark ? "Light mode" : "Dark mode"}
@@ -903,6 +1000,48 @@ export default function NoteApp() {
               <button style={s.btn("ghost")} onClick={() => { setAddTabModal(false); setAddTabFromNote(false); setNewTabName(""); }}>Cancel</button>
               <button style={s.btn("primary")} onClick={() => addTab(addTabFromNote)}>Add</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── google calendar modal ── */}
+      {gcalModal && (
+        <div style={s.modal} onClick={() => setGcalModal(false)}>
+          <div style={{ ...s.mbox, maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700 }}>📅 Google Calendar</div>
+                <div style={{ fontSize: 12, color: c.muted, marginTop: 2 }}>Next 30 days — click any event to import as a note</div>
+              </div>
+              <button style={s.iconBtn()} onClick={() => setGcalModal(false)}><Ico d="M18 6L6 18M6 6l12 12" /></button>
+            </div>
+            {gcalLoading ? (
+              <div style={{ textAlign: "center", padding: 30, color: c.muted }}>Loading events…</div>
+            ) : gcalEvents.length === 0 ? (
+              <div style={{ textAlign: "center", padding: 30, color: c.muted }}>No upcoming events found.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 420, overflowY: "auto" }}>
+                {gcalEvents.map(event => {
+                  const start = event.start?.dateTime || event.start?.date;
+                  const dateStr = start ? fmt(new Date(start).getTime()) : "";
+                  return (
+                    <div key={event.id}
+                      onClick={async () => { await importGcalEvent(event); setGcalModal(false); }}
+                      style={{ padding: "11px 14px", borderRadius: 10, border: `1px solid ${c.border}`, cursor: "pointer", background: c.input, transition: "all 0.12s" }}
+                      onMouseEnter={e => e.currentTarget.style.borderColor = c.accent}
+                      onMouseLeave={e => e.currentTarget.style.borderColor = c.border}
+                    >
+                      <div style={{ fontSize: 13.5, fontWeight: 600, color: c.text }}>{event.summary || "Untitled Event"}</div>
+                      <div style={{ fontSize: 12, color: c.muted, marginTop: 3 }}>
+                        📅 {dateStr}
+                        {event.location && <span> · 📍 {event.location}</span>}
+                      </div>
+                      {event.description && <div style={{ fontSize: 12, color: c.muted, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{event.description}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}

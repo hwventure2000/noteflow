@@ -231,11 +231,13 @@ export default function NoteApp() {
   const [ocrPreview, setOcrPreview] = useState(null);
   const [scanReviewModal, setScanReviewModal] = useState(null);
 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [form, setForm] = useState({ title: "", body: "", priority: false, tabs: [], attachments: [], reminder: "" });
   const [listening, setListening] = useState(false);
   const [shareEmail, setShareEmail] = useState("");
   const [sharePerm, setSharePerm] = useState("view");
   const [dropActive, setDropActive] = useState(false);
+  const [colorPickerTabId, setColorPickerTabId] = useState(null);
 
   const fileRef = useRef(null);
   const ocrFileRef = useRef(null);
@@ -252,6 +254,18 @@ export default function NoteApp() {
   }, []);
 
   useEffect(() => { if (session) { loadCategories(); loadNotes(); } }, [session]);
+
+  // Cmd+N / Ctrl+N to open new note
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "n") {
+        e.preventDefault();
+        if (session && view === "all") openNew();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [session, view, activeTab]);
 
   const signOut = async () => { await sb.auth.signOut(); setNotes([]); setCategories([]); };
 
@@ -303,6 +317,13 @@ export default function NoteApp() {
     await sb.from("categories").update({ label: editingTabName.trim() }).eq("id", editingTabId);
     setCategories(cats => cats.map(c => c.id === editingTabId ? { ...c, label: editingTabName.trim() } : c));
     setEditingTabId(null);
+  };
+
+  const CAT_COLORS = ["#7c6af7","#ef4444","#f59e0b","#10b981","#3b82f6","#ec4899","#8b5cf6","#06b6d4","#f97316","#84cc16"];
+  const updateCategoryColor = async (id, color) => {
+    await sb.from("categories").update({ color }).eq("id", id);
+    setCategories(cats => cats.map(c => c.id === id ? { ...c, color } : c));
+    setColorPickerTabId(null);
   };
 
   const onTabDragStart = (e, id) => { setDragTabId(id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", id); };
@@ -609,7 +630,11 @@ export default function NoteApp() {
     if (n.completed || n.trashed) return false;
     if (activeTab === "uncategorized") return n.tabs.length === 0;
     if (activeTab !== "all" && !n.tabs.includes(activeTab)) return false;
-    if (search && !n.title.toLowerCase().includes(search.toLowerCase()) && !n.body.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      const noteTabLabels = n.tabs.map(tid => categories.find(cat => cat.id === tid)?.label || "").join(" ").toLowerCase();
+      if (!n.title.toLowerCase().includes(q) && !n.body.toLowerCase().includes(q) && !noteTabLabels.includes(q)) return false;
+    }
     return true;
   });
   const sorted = [...visibleNotes].sort((a, b) => {
@@ -622,9 +647,8 @@ export default function NoteApp() {
 
   const s = {
     app: { display: "flex", height: "100vh", width: "100vw", background: c.bg, color: c.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", overflow: "hidden", fontSize: 14 },
-    sidebar: { width: 220, minWidth: 220, background: c.sidebar, borderRight: `1px solid ${c.border}`, display: "flex", flexDirection: "column" },
-    // CHANGE: sidebar tab font bumped to 16px
-    tabRow: (active, dragOver) => ({ display: "flex", alignItems: "center", padding: "9px 16px", fontSize: 16, fontWeight: active || dragOver ? 700 : 400, color: dragOver ? "#fff" : active ? c.accent : c.text, background: dragOver ? c.accent : active ? c.accentSoft : "transparent", borderLeft: `3px solid ${active || dragOver ? c.accent : "transparent"}`, borderRadius: dragOver ? 8 : 0, margin: dragOver ? "0 6px" : "0", transition: "all 0.12s", userSelect: "none", gap: 6, boxShadow: dragOver ? `0 2px 12px ${c.accent}66` : "none" }),
+    sidebar: { width: sidebarCollapsed ? 0 : 220, minWidth: sidebarCollapsed ? 0 : 220, background: c.sidebar, borderRight: sidebarCollapsed ? "none" : `1px solid ${c.border}`, display: "flex", flexDirection: "column", overflow: "hidden", transition: "width 0.22s cubic-bezier(0.4,0,0.2,1), min-width 0.22s" },
+    tabRow: (active, dragOver, catColor) => ({ display: "flex", alignItems: "center", padding: "9px 16px", fontSize: 15, fontWeight: active ? 600 : 400, fontFamily: "'Inter','Helvetica Neue','Segoe UI',sans-serif", letterSpacing: "0.01em", color: dragOver ? "#fff" : active ? (catColor || c.accent) : c.text, background: dragOver ? (catColor || c.accent) : active ? (catColor ? catColor + "22" : c.accentSoft) : "transparent", borderLeft: `3px solid ${active || dragOver ? (catColor || c.accent) : "transparent"}`, borderRadius: dragOver ? 8 : 0, margin: dragOver ? "0 6px" : "0", transition: "all 0.12s", userSelect: "none", gap: 6, boxShadow: dragOver ? `0 2px 12px ${catColor || c.accent}66` : "none" }),
     main: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" },
     topbar: { padding: "13px 20px", borderBottom: `1px solid ${c.border}`, display: "flex", alignItems: "center", gap: 8, background: c.sidebar, flexWrap: "wrap" },
     searchWrap: { flex: 1, minWidth: 160, display: "flex", alignItems: "center", gap: 8, background: c.input, border: `1px solid ${c.inputBorder}`, borderRadius: 10, padding: "7px 12px" },
@@ -634,8 +658,8 @@ export default function NoteApp() {
     content: { flex: 1, overflowY: "auto", padding: 20 },
     grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 13 },
     listWrap: { display: "flex", flexDirection: "column", gap: 8 },
-    card: (pri, dragging, dragOver) => ({ background: c.card, border: `2px solid ${dragOver ? c.accent : pri ? c.accent + "55" : c.border}`, borderRadius: 13, padding: "13px 15px", display: "flex", flexDirection: "column", gap: 8, opacity: dragging ? 0.15 : 1, cursor: "grab", transition: "border-color 0.12s, opacity 0.12s", boxShadow: dragOver ? `0 0 0 3px ${c.accent}33` : "none" }),
-    listCard: (pri, dragging, dragOver) => ({ background: c.card, border: `2px solid ${dragOver ? c.accent : pri ? c.accent + "44" : c.border}`, borderRadius: 10, padding: "10px 14px", display: "flex", alignItems: "flex-start", gap: 10, opacity: dragging ? 0.15 : 1, cursor: "grab", transition: "border-color 0.12s" }),
+    card: (pri, dragging, dragOver) => ({ background: c.card, border: `2px solid ${dragOver ? c.accent : pri ? c.accent + "55" : c.border}`, borderRadius: 13, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 9, opacity: dragging ? 0.15 : 1, cursor: "grab", transition: "border-color 0.12s, opacity 0.12s", boxShadow: dragOver ? `0 0 0 3px ${c.accent}33` : "none" }),
+    listCard: (pri, dragging, dragOver) => ({ background: c.card, border: `2px solid ${dragOver ? c.accent : pri ? c.accent + "44" : c.border}`, borderRadius: 10, padding: "11px 16px", display: "flex", alignItems: "flex-start", gap: 10, opacity: dragging ? 0.15 : 1, cursor: "grab", transition: "border-color 0.12s" }),
     modal: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 },
     mbox: { background: c.card, border: `1px solid ${c.border}`, borderRadius: 18, padding: 24, width: "100%", maxWidth: 540, maxHeight: "90vh", overflowY: "auto" },
     inp: { width: "100%", background: c.input, border: `1px solid ${c.inputBorder}`, borderRadius: 9, padding: "9px 12px", color: c.text, fontSize: 13.5, outline: "none", boxSizing: "border-box" },
@@ -709,17 +733,25 @@ export default function NoteApp() {
                   }}
                   onDragEnd={() => { setDragTabId(null); setDragOverTabId(null); setDragOverCategoryId(null); }}
                   style={{
-                    ...s.tabRow(view === "all" && activeTab === t.id, (dragOverTabId === t.id && dragTabId !== t.id) || dragOverCategoryId === t.id),
+                    ...s.tabRow(view === "all" && activeTab === t.id, (dragOverTabId === t.id && dragTabId !== t.id) || dragOverCategoryId === t.id, t.color),
                     cursor: t.fixed ? "pointer" : "grab",
                   }}
                   onClick={() => { setActiveTab(t.id); setView("all"); }}
                   onDoubleClick={t.fixed ? undefined : e => { e.stopPropagation(); setEditingTabId(t.id); setEditingTabName(t.label); }}
-                  title={t.fixed ? "" : "Drop a note here to assign · Double-click to rename"}
+                  title={t.fixed ? "" : "Drop a note here · Double-click to rename"}
                 >
-                  {!t.fixed && <span style={{ color: dragOverCategoryId === t.id ? c.accent : c.muted, fontSize: 13, cursor: "grab" }}>⠿</span>}
+                  {!t.fixed && <span style={{ color: dragOverCategoryId === t.id ? (t.color || c.accent) : c.muted, fontSize: 13, cursor: "grab" }}>⠿</span>}
+                  {/* color dot for custom categories */}
+                  {!t.fixed && (
+                    <span
+                      onClick={e => { e.stopPropagation(); setColorPickerTabId(colorPickerTabId === t.id ? null : t.id); }}
+                      title="Change color"
+                      style={{ width: 10, height: 10, borderRadius: "50%", background: t.color || c.muted, flexShrink: 0, cursor: "pointer", border: `1.5px solid ${t.color ? "transparent" : c.border}`, display: "inline-block" }}
+                    />
+                  )}
                   <span style={{ flex: 1 }}>{t.label}</span>
-                  {dragOverCategoryId === t.id && <span style={{ fontSize: 11, color: c.accent, fontWeight: 700, marginRight: 2 }}>+ Assign</span>}
-                  <span style={s.badge()}>{countForTab(t.id)}</span>
+                  {dragOverCategoryId === t.id && <span style={{ fontSize: 11, color: t.color || c.accent, fontWeight: 700, marginRight: 2 }}>+ Assign</span>}
+                  <span style={{ ...s.badge(t.color || undefined) }}>{countForTab(t.id)}</span>
                   {!t.fixed && (
                     <span style={{ marginLeft: 4 }}>
                       <span style={{ ...s.iconBtn(c.danger), padding: 2, fontSize: 11 }} onClick={e => { e.stopPropagation(); removeTab(t.id); }}>✕</span>
@@ -727,15 +759,25 @@ export default function NoteApp() {
                   )}
                 </div>
               )}
+              {/* color picker popover */}
+              {colorPickerTabId === t.id && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 16px 10px", background: c.card, borderBottom: `1px solid ${c.border}` }}>
+                  {CAT_COLORS.map(col => (
+                    <span key={col} onClick={() => updateCategoryColor(t.id, col)}
+                      style={{ width: 18, height: 18, borderRadius: "50%", background: col, cursor: "pointer", border: t.color === col ? `2px solid ${c.text}` : "2px solid transparent", flexShrink: 0 }} />
+                  ))}
+                  {t.color && <span onClick={() => updateCategoryColor(t.id, null)} style={{ fontSize: 11, color: c.muted, cursor: "pointer", alignSelf: "center" }}>reset</span>}
+                </div>
+              )}
             </div>
           ))}
-          <div style={{ ...s.tabRow(false, false), cursor: "pointer", color: c.accent, opacity: 0.8 }} onClick={() => setAddTabModal(true)}>+ Add category</div>
+          <div style={{ ...s.tabRow(false, false, undefined), cursor: "pointer", color: c.accent, opacity: 0.8 }} onClick={() => setAddTabModal(true)}>+ Add category</div>
           <div style={s.div} />
-          <div style={{ ...s.tabRow(view === "completed", false), cursor: "pointer" }} onClick={() => setView("completed")}>
+          <div style={{ ...s.tabRow(view === "completed", false, undefined), cursor: "pointer" }} onClick={() => setView("completed")}>
             <span style={{ flex: 1 }}>🗂 Completed</span>
             <span style={s.badge(c.muted)}>{notes.filter(n => n.completed && !n.trashed).length}</span>
           </div>
-          <div style={{ ...s.tabRow(view === "trash", false), cursor: "pointer" }} onClick={() => setView("trash")}>
+          <div style={{ ...s.tabRow(view === "trash", false, undefined), cursor: "pointer" }} onClick={() => setView("trash")}>
             <span style={{ flex: 1 }}>🗑 Trash</span>
             <span style={s.badge(c.muted)}>{notes.filter(n => n.trashed).length}</span>
           </div>
@@ -764,6 +806,9 @@ export default function NoteApp() {
       {/* ── main ── */}
       <div style={s.main}>
         <div style={s.topbar}>
+          <button style={{ ...s.iconBtn(c.muted), padding: "6px 8px" }} title="Toggle sidebar (⌘\)" onClick={() => setSidebarCollapsed(v => !v)}>
+            <Ico d="M3 12h18M3 6h18M3 18h18" size={17} />
+          </button>
           <div style={s.searchWrap}>
             <Ico d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" />
             <input style={s.searchInput} placeholder="Search notes…" value={search} onChange={e => setSearch(e.target.value)} />

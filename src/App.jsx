@@ -243,6 +243,7 @@ export default function NoteApp() {
   const [draggingNoteId, setDraggingNoteId] = useState(null);
   const [dragTabId, setDragTabId] = useState(null);
   const [dragOverTabId, setDragOverTabId] = useState(null);
+  const [dragOverCategoryId, setDragOverCategoryId] = useState(null);
   const [dbLoading, setDbLoading] = useState(false);
 
   const [noteModal, setNoteModal] = useState(null);
@@ -356,7 +357,25 @@ export default function NoteApp() {
     });
   };
 
-  // ── Notes CRUD ────────────────────────────────────────────────────────────────
+  // ── Drop note onto category tab ───────────────────────────────────────────
+  const onCategoryDragOver = (e, tabId) => {
+    // only respond if a note is being dragged (not a tab)
+    if (!_dragNoteId) return;
+    e.preventDefault();
+    setDragOverCategoryId(tabId);
+  };
+  const onCategoryDragLeave = () => setDragOverCategoryId(null);
+  const onCategoryDrop = async (e, tabId) => {
+    e.preventDefault();
+    const noteId = _dragNoteId;
+    setDragOverCategoryId(null);
+    if (!noteId) return;
+    const note = notes.find(n => n.id === noteId);
+    if (!note) return;
+    // add category if not already assigned
+    const newTabs = note.tabs.includes(tabId) ? note.tabs : [...note.tabs, tabId];
+    await updateNote(noteId, { tabs: newTabs }, `Added to ${tabs.find(t => t.id === tabId)?.label}`);
+  };
   const tabs = [...FIXED_TABS.filter(t => t.id === "all"), ...categories, ...FIXED_TABS.filter(t => t.id === "uncategorized")];
 
   const openNew = () => {
@@ -622,16 +641,36 @@ export default function NoteApp() {
                 <div
                   draggable={!t.fixed}
                   onDragStart={t.fixed ? undefined : e => onTabDragStart(e, t.id)}
-                  onDragOver={t.fixed ? undefined : e => onTabDragOver(e, t.id)}
-                  onDrop={t.fixed ? undefined : e => onTabDrop(e, t.id)}
-                  onDragEnd={() => { setDragTabId(null); setDragOverTabId(null); }}
-                  style={{ ...s.tabRow(view === "all" && activeTab === t.id, dragOverTabId === t.id && dragTabId !== t.id), cursor: t.fixed ? "pointer" : "grab" }}
+                  onDragOver={e => {
+                    // tab reordering only for non-fixed tabs dragging tabs
+                    if (!t.fixed && !_dragNoteId) onTabDragOver(e, t.id);
+                    // note-to-category drop works on ALL non-fixed category tabs
+                    if (!t.fixed) onCategoryDragOver(e, t.id);
+                    // still need preventDefault so drop fires
+                    if (_dragNoteId && !t.fixed) e.preventDefault();
+                  }}
+                  onDragLeave={onCategoryDragLeave}
+                  onDrop={e => {
+                    if (_dragNoteId && !t.fixed) { onCategoryDrop(e, t.id); }
+                    else if (!t.fixed && !_dragNoteId) { onTabDrop(e, t.id); }
+                  }}
+                  onDragEnd={() => { setDragTabId(null); setDragOverTabId(null); setDragOverCategoryId(null); }}
+                  style={{
+                    ...s.tabRow(
+                      view === "all" && activeTab === t.id,
+                      (dragOverTabId === t.id && dragTabId !== t.id) || dragOverCategoryId === t.id
+                    ),
+                    cursor: t.fixed ? "pointer" : "grab",
+                  }}
                   onClick={() => { setActiveTab(t.id); setView("all"); }}
                   onDoubleClick={t.fixed ? undefined : e => { e.stopPropagation(); setEditingTabId(t.id); setEditingTabName(t.label); }}
-                  title={t.fixed ? "" : "Double-click to rename"}
+                  title={t.fixed ? "" : "Drop a note here to assign · Double-click to rename"}
                 >
-                  {!t.fixed && <span style={{ color: c.muted, fontSize: 13, cursor: "grab" }}>⠿</span>}
+                  {!t.fixed && <span style={{ color: dragOverCategoryId === t.id ? c.accent : c.muted, fontSize: 13, cursor: "grab" }}>⠿</span>}
                   <span style={{ flex: 1 }}>{t.label}</span>
+                  {dragOverCategoryId === t.id && (
+                    <span style={{ fontSize: 11, color: c.accent, fontWeight: 700, marginRight: 2 }}>+ Assign</span>
+                  )}
                   <span style={s.badge()}>{countForTab(t.id)}</span>
                   {!t.fixed && (
                     <span style={{ marginLeft: 4 }}>

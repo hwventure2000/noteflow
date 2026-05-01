@@ -433,6 +433,7 @@ export default function NoteApp() {
   const toggleComplete = (id, cur) => updateNote(id, { completed: !cur }, cur ? "Restored" : "Marked complete");
   const togglePriority = (id, cur) => updateNote(id, { priority: !cur }, cur ? "Removed priority" : "Set as priority");
   const restoreFromCompleted = (id) => updateNote(id, { completed: false }, "Restored from completed");
+  const inlineSaveNote = (id, patch) => updateNote(id, patch, "Inline edit");
 
   // ── Note drag ─────────────────────────────────────────────────────────────────
   const handleDragStart = useCallback((e, id) => { _dragNoteId = id; setDraggingNoteId(id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", id); }, []);
@@ -592,7 +593,7 @@ export default function NoteApp() {
   const s = {
     app: { display: "flex", height: "100vh", width: "100vw",  background: c.bg, color: c.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", overflow: "hidden", fontSize: 14 },
     sidebar: { width: 220, minWidth: 220, background: c.sidebar, borderRight: `1px solid ${c.border}`, display: "flex", flexDirection: "column" },
-    tabRow: (active, dragOver) => ({ display: "flex", alignItems: "center", padding: "9px 16px", fontSize: 13.5, fontWeight: active ? 600 : 400, color: active ? c.accent : c.text, background: active ? c.accentSoft : dragOver ? c.accentSoft + "99" : "transparent", borderLeft: `3px solid ${active ? c.accent : dragOver ? c.accent + "88" : "transparent"}`, transition: "all 0.13s", userSelect: "none", gap: 6 }),
+    tabRow: (active, dragOver) => ({ display: "flex", alignItems: "center", padding: "9px 16px", fontSize: 13.5, fontWeight: active || dragOver ? 700 : 400, color: dragOver ? "#fff" : active ? c.accent : c.text, background: dragOver ? c.accent : active ? c.accentSoft : "transparent", borderLeft: `3px solid ${active || dragOver ? c.accent : "transparent"}`, borderRadius: dragOver ? 8 : 0, margin: dragOver ? "0 6px" : "0", transition: "all 0.12s", userSelect: "none", gap: 6, boxShadow: dragOver ? `0 2px 12px ${c.accent}66` : "none" }),
     main: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" },
     topbar: { padding: "13px 20px", borderBottom: `1px solid ${c.border}`, display: "flex", alignItems: "center", gap: 8, background: c.sidebar, flexWrap: "wrap" },
     searchWrap: { flex: 1, minWidth: 160, display: "flex", alignItems: "center", gap: 8, background: c.input, border: `1px solid ${c.inputBorder}`, borderRadius: 10, padding: "7px 12px" },
@@ -741,7 +742,8 @@ export default function NoteApp() {
                   onDelete={() => deletePermanently(note.id)} onToggleComplete={() => toggleComplete(note.id, note.completed)}
                   onTogglePriority={() => togglePriority(note.id, note.priority)} onShare={() => setShareModal(note)}
                   onHistory={() => setHistoryModal(note)}
-                  onRestore={() => view === "trash" ? restoreFromTrash(note.id) : restoreFromCompleted(note.id)} />
+                  onRestore={() => view === "trash" ? restoreFromTrash(note.id) : restoreFromCompleted(note.id)}
+                  onInlineSave={inlineSaveNote} />
               ))}
             </div>
           ) : (
@@ -1122,12 +1124,30 @@ function ScanReviewModal({ reviewNotes, setReviewNotes, tabs, s, c, onAcceptAll,
 }
 
 // ── Grid Card ─────────────────────────────────────────────────────────────────
-function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, fileIcon, onEdit, onTrash, onDelete, onToggleComplete, onTogglePriority, onShare, onHistory, onRestore }) {
+function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, fileIcon, onEdit, onTrash, onDelete, onToggleComplete, onTogglePriority, onShare, onHistory, onRestore, onInlineSave }) {
   const [hover, setHover] = useState(false);
+  const [editingField, setEditingField] = useState(null); // "title" | "body"
+  const [draft, setDraft] = useState({ title: note.title, body: note.body });
   const noteTabs = tabs.filter(t => note.tabs?.includes(t.id));
+
+  const startEdit = (field, e) => {
+    if (view !== "all") return;
+    e.stopPropagation();
+    setDraft({ title: note.title, body: note.body });
+    setEditingField(field);
+  };
+  const commitEdit = () => {
+    if (editingField && (draft.title !== note.title || draft.body !== note.body)) {
+      onInlineSave(note.id, { title: draft.title, body: draft.body });
+    }
+    setEditingField(null);
+  };
+
   return (
-    <div draggable onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
-      onDoubleClick={view === "all" ? onEdit : undefined}
+    <div
+      draggable={!editingField}
+      onDragStart={editingField ? undefined : onDragStart}
+      onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
       style={{ ...s.card(note.priority && view === "all", isDragging, isDragOver), background: isDragOver ? c.accentSoft : hover ? c.cardHover : c.card }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
@@ -1137,11 +1157,45 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
           </div>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, textDecoration: note.completed ? "line-through" : "none", opacity: note.completed ? 0.55 : 1 }}>{note.title}</div>
+          {editingField === "title" ? (
+            <input
+              autoFocus
+              style={{ ...s.inp, padding: "2px 6px", fontSize: 14, fontWeight: 600, width: "100%" }}
+              value={draft.title}
+              onChange={e => setDraft(d => ({ ...d, title: e.target.value }))}
+              onBlur={commitEdit}
+              onKeyDown={e => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") setEditingField(null); }}
+              onClick={e => e.stopPropagation()}
+            />
+          ) : (
+            <div
+              onClick={e => startEdit("title", e)}
+              title={view === "all" ? "Click to edit title" : ""}
+              style={{ fontSize: 14, fontWeight: 600, textDecoration: note.completed ? "line-through" : "none", opacity: note.completed ? 0.55 : 1, cursor: view === "all" ? "text" : "default", borderRadius: 4, padding: "1px 2px", transition: "background 0.1s" }}
+            >{note.title}</div>
+          )}
         </div>
         <Star filled={note.priority} size={15} onClick={onTogglePriority} />
       </div>
-      {note.body && <div style={{ fontSize: 13, color: c.muted, lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{note.body}</div>}
+
+      {editingField === "body" ? (
+        <textarea
+          autoFocus
+          style={{ ...s.ta, fontSize: 13, minHeight: 60 }}
+          value={draft.body}
+          onChange={e => setDraft(d => ({ ...d, body: e.target.value }))}
+          onBlur={commitEdit}
+          onKeyDown={e => { if (e.key === "Escape") setEditingField(null); }}
+          onClick={e => e.stopPropagation()}
+        />
+      ) : (
+        <div
+          onClick={e => startEdit("body", e)}
+          title={view === "all" ? "Click to edit" : ""}
+          style={{ fontSize: 13, color: note.body ? c.muted : c.inputBorder, lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", cursor: view === "all" ? "text" : "default", borderRadius: 4, padding: "1px 2px", minHeight: 18, transition: "background 0.1s" }}
+        >{note.body || (view === "all" && hover ? "Click to add body…" : "")}</div>
+      )}
+
       {note.attachments?.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>{note.attachments.map(a => <a key={a.id} href={a.url} target="_blank" rel="noreferrer" style={{ ...s.tag, textDecoration: "none" }}>{fileIcon(a.type)} {a.name?.length > 15 ? a.name.slice(0, 15) + "…" : a.name}</a>)}</div>}
       {noteTabs.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>{noteTabs.map(t => <span key={t.id} style={s.tag}>{t.label}</span>)}</div>}
       {(!note.tabs || note.tabs.length === 0) && view === "all" && <span style={{ ...s.tag, background: c.border, color: c.muted }}>Uncategorized</span>}

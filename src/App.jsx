@@ -184,6 +184,15 @@ function ReminderPicker({ value, onChange, s, c }) {
   );
 }
 
+// Inject Inter font
+if (typeof document !== "undefined" && !document.getElementById("inter-font")) {
+  const link = document.createElement("link");
+  link.id = "inter-font";
+  link.rel = "stylesheet";
+  link.href = "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap";
+  document.head.appendChild(link);
+}
+
 export default function NoteApp() {
   const [dark, setDark] = useState(true);
   const c = dark ? T.dark : T.light;
@@ -667,8 +676,8 @@ export default function NoteApp() {
             <rect x="42" y="53" width="16" height="4" rx="2" fill="#A99EF0"/>
           </svg>
           <div>
-            <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: "-0.5px", lineHeight: 1.1 }}>
-              <span style={{ color: c.text }}>Note</span><span style={{ color: c.accent }}>Flow</span>
+            <div style={{ fontSize: 18, fontWeight: 300, letterSpacing: "0.01em", lineHeight: 1.1, fontFamily: "'Inter','Helvetica Neue','Segoe UI',sans-serif" }}>
+              <span style={{ color: c.text, fontWeight: 600 }}>Note</span><span style={{ color: c.accent, fontWeight: 300 }}>Flow</span>
             </div>
             <div style={{ fontSize: 11, color: c.muted, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 148 }}>{session.user.email}</div>
           </div>

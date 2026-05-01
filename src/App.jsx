@@ -647,7 +647,25 @@ export default function NoteApp() {
       <div style={s.sidebar}>
         {/* CHANGE: Logo replaced with webp image + styled wordmark */}
         <div style={{ padding: "14px 16px 12px", borderBottom: `1px solid ${c.border}`, display: "flex", alignItems: "center", gap: 10 }}>
-          <img src="/Logo_5_26b.webp" alt="NoteFlow" style={{ width: 38, height: 38, borderRadius: 9, objectFit: "cover", flexShrink: 0 }} />
+          <svg width="38" height="38" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+            <rect width="100" height="100" rx="22" fill="url(#bg)"/>
+            <defs>
+              <linearGradient id="bg" x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="#9B8BF8"/>
+                <stop offset="100%" stopColor="#5B3FD4"/>
+              </linearGradient>
+            </defs>
+            {/* curled page shadow */}
+            <path d="M62 82 Q78 80 80 65 L80 30 Q80 24 74 24 L44 24 Q38 24 38 30 L38 76 Q50 88 62 82Z" fill="#4A2FB0" opacity="0.5"/>
+            {/* main page */}
+            <path d="M58 78 Q74 76 76 61 L76 26 Q76 20 70 20 L40 20 Q34 20 34 26 L34 72 Q46 84 58 78Z" fill="white"/>
+            {/* curl triangle */}
+            <path d="M34 72 Q34 84 46 84 Q46 84 34 72Z" fill="#C4B8F8" opacity="0.6"/>
+            {/* text lines */}
+            <rect x="42" y="33" width="24" height="4" rx="2" fill="#A99EF0"/>
+            <rect x="42" y="43" width="22" height="4" rx="2" fill="#A99EF0"/>
+            <rect x="42" y="53" width="16" height="4" rx="2" fill="#A99EF0"/>
+          </svg>
           <div>
             <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: "-0.5px", lineHeight: 1.1 }}>
               <span style={{ color: c.text }}>Note</span><span style={{ color: c.accent }}>Flow</span>

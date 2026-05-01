@@ -648,7 +648,7 @@ export default function NoteApp() {
   const s = {
     app: { display: "flex", height: "100vh", width: "100vw", background: c.bg, color: c.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", overflow: "hidden", fontSize: 14 },
     sidebar: { width: sidebarCollapsed ? 0 : 220, minWidth: sidebarCollapsed ? 0 : 220, background: c.sidebar, borderRight: sidebarCollapsed ? "none" : `1px solid ${c.border}`, display: "flex", flexDirection: "column", overflow: "hidden", transition: "width 0.22s cubic-bezier(0.4,0,0.2,1), min-width 0.22s" },
-    tabRow: (active, dragOver, catColor) => ({ display: "flex", alignItems: "center", padding: "9px 16px", fontSize: 15, fontWeight: active ? 600 : 400, fontFamily: "'Inter','Helvetica Neue','Segoe UI',sans-serif", letterSpacing: "0.01em", color: dragOver ? "#fff" : active ? (catColor || c.accent) : c.text, background: dragOver ? (catColor || c.accent) : active ? (catColor ? catColor + "22" : c.accentSoft) : "transparent", borderLeft: `3px solid ${active || dragOver ? (catColor || c.accent) : "transparent"}`, borderRadius: dragOver ? 8 : 0, margin: dragOver ? "0 6px" : "0", transition: "all 0.12s", userSelect: "none", gap: 6, boxShadow: dragOver ? `0 2px 12px ${catColor || c.accent}66` : "none" }),
+    tabRow: (active, dragOver, catColor) => ({ display: "flex", alignItems: "center", padding: "9px 16px", fontSize: 15, fontWeight: active ? 600 : 400, fontFamily: "'Inter','Helvetica Neue','Segoe UI',sans-serif", letterSpacing: "0.01em", color: active ? (catColor || c.accent) : c.text, background: active ? (catColor ? catColor + "22" : c.accentSoft) : "transparent", borderLeft: `3px solid ${active ? (catColor || c.accent) : "transparent"}`, borderTop: dragOver ? `2px solid ${c.accent}` : "2px solid transparent", transition: "all 0.1s", userSelect: "none", gap: 6 }),
     main: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" },
     topbar: { padding: "13px 20px", borderBottom: `1px solid ${c.border}`, display: "flex", alignItems: "center", gap: 8, background: c.sidebar, flexWrap: "wrap" },
     searchWrap: { flex: 1, minWidth: 160, display: "flex", alignItems: "center", gap: 8, background: c.input, border: `1px solid ${c.inputBorder}`, borderRadius: 10, padding: "7px 12px" },
@@ -699,12 +699,15 @@ export default function NoteApp() {
             <rect x="42" y="43" width="22" height="4" rx="2" fill="#A99EF0"/>
             <rect x="42" y="53" width="16" height="4" rx="2" fill="#A99EF0"/>
           </svg>
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 18, fontWeight: 300, letterSpacing: "0.01em", lineHeight: 1.1, fontFamily: "'Inter','Helvetica Neue','Segoe UI',sans-serif" }}>
               <span style={{ color: c.text, fontWeight: 600 }}>Note</span><span style={{ color: c.accent, fontWeight: 300 }}>Flow</span>
             </div>
-            <div style={{ fontSize: 11, color: c.muted, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 148 }}>{session.user.email}</div>
+            <div style={{ fontSize: 11, color: c.muted, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.user.email}</div>
           </div>
+          <button onClick={() => setSidebarCollapsed(true)} title="Collapse sidebar" style={{ background: "none", border: "none", cursor: "pointer", color: c.muted, padding: 4, borderRadius: 6, display: "flex", alignItems: "center", flexShrink: 0 }}>
+            <Ico d="M11 19l-7-7 7-7M18 19l-7-7 7-7" size={16} />
+          </button>
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", paddingTop: 6 }}>
@@ -806,7 +809,7 @@ export default function NoteApp() {
       {/* ── main ── */}
       <div style={s.main}>
         <div style={s.topbar}>
-          <button style={{ ...s.iconBtn(c.muted), padding: "6px 8px" }} title="Toggle sidebar (⌘\)" onClick={() => setSidebarCollapsed(v => !v)}>
+          <button style={{ ...s.iconBtn(c.muted), padding: "6px 8px" }} title="Toggle sidebar" onClick={() => setSidebarCollapsed(v => !v)}>
             <Ico d="M3 12h18M3 6h18M3 18h18" size={17} />
           </button>
           <div style={s.searchWrap}>

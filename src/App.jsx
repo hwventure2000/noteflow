@@ -833,7 +833,14 @@ export default function NoteApp() {
           {dbLoading && <span style={{ fontSize: 12, color: c.muted }}>Syncing…</span>}
         </div>
 
-        <div style={s.content}>
+        <div style={s.content}
+          onDragOver={e => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }}
+          onDrop={e => {
+            e.preventDefault();
+            const file = Array.from(e.dataTransfer.files).find(f => f.name.endsWith(".ics"));
+            if (file) importIcsFile(file);
+          }}
+        >
           {sorted.length === 0 ? (
             <div style={{ textAlign: "center", color: c.muted, marginTop: 70 }}>
               <div style={{ fontSize: 42, marginBottom: 10 }}>{view === "trash" ? "🗑️" : view === "completed" ? "🎉" : "📝"}</div>

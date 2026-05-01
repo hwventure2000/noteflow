@@ -52,11 +52,10 @@ If it contains MULTIPLE distinct notes or items, return: {"type":"multi","notes"
   } catch { return null; }
 }
 
-// ── Chime sound via Web Audio API ─────────────────────────────────────────────
 function playChime() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const notes = [523.25, 659.25, 783.99, 1046.50]; // C5 E5 G5 C6
+    const notes = [523.25, 659.25, 783.99, 1046.50];
     notes.forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -71,12 +70,11 @@ function playChime() {
       osc.start(start);
       osc.stop(start + 0.5);
     });
-  } catch (e) { /* silently fail if audio not available */ }
+  } catch (e) { }
 }
 
 let _dragNoteId = null;
 
-// ── Auth Screen ───────────────────────────────────────────────────────────────
 function AuthScreen({ c, s }) {
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
@@ -130,7 +128,6 @@ function AuthScreen({ c, s }) {
   );
 }
 
-// ── Reminder Picker ───────────────────────────────────────────────────────────
 function ReminderPicker({ value, onChange, s, c }) {
   const parse = (v) => {
     if (!v) return { date: "", hour: "12", minute: "00", ampm: "AM" };
@@ -146,9 +143,7 @@ function ReminderPicker({ value, onChange, s, c }) {
   };
 
   const parsed = parse(value);
-  // Local draft state for the minute box so typing isn't interrupted
   const [minDraft, setMinDraft] = useState(parsed.minute);
-  // Keep draft in sync when the value changes from outside
   useEffect(() => { setMinDraft(parse(value).minute); }, [value]);
 
   const emit = (d, h, m, ap) => {
@@ -173,62 +168,22 @@ function ReminderPicker({ value, onChange, s, c }) {
   return (
     <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
       <style>{`input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(55%) sepia(60%) saturate(600%) hue-rotate(220deg); cursor: pointer; }`}</style>
-      <input
-        type="date"
-        style={{ ...s.inp, flex: "1 1 130px", minWidth: 130 }}
-        value={parsed.date}
-        onChange={e => emit(e.target.value, parsed.hour, parsed.minute, parsed.ampm)}
-      />
-      <select
-        style={{ ...s.inp, width: 70 }}
-        value={parsed.hour}
-        onChange={e => {
-          emit(parsed.date, e.target.value, parsed.minute, parsed.ampm);
-          // auto-advance cursor to minute field
-          setTimeout(() => { minuteRef.current?.focus(); minuteRef.current?.select(); }, 0);
-        }}
-      >
+      <input type="date" style={{ ...s.inp, flex: "1 1 130px", minWidth: 130 }} value={parsed.date} onChange={e => emit(e.target.value, parsed.hour, parsed.minute, parsed.ampm)} />
+      <select style={{ ...s.inp, width: 70 }} value={parsed.hour} onChange={e => { emit(parsed.date, e.target.value, parsed.minute, parsed.ampm); setTimeout(() => { minuteRef.current?.focus(); minuteRef.current?.select(); }, 0); }}>
         {hours.map(h => <option key={h} value={h}>{h}</option>)}
       </select>
       <span style={{ color: c.muted, fontWeight: 700 }}>:</span>
-      <input
-        ref={minuteRef}
-        type="text"
-        inputMode="numeric"
-        maxLength={2}
-        style={{ ...s.inp, width: 56, textAlign: "center" }}
-        value={minDraft}
-        onChange={e => setMinDraft(e.target.value.replace(/\D/g, "").slice(0, 2))}
-        onFocus={e => e.target.select()}
-        onBlur={e => commitMinute(e.target.value)}
-        onKeyDown={e => { if (e.key === "Enter") commitMinute(e.target.value); }}
-        placeholder="00"
-      />
+      <input ref={minuteRef} type="text" inputMode="numeric" maxLength={2} style={{ ...s.inp, width: 56, textAlign: "center" }} value={minDraft} onChange={e => setMinDraft(e.target.value.replace(/\D/g, "").slice(0, 2))} onFocus={e => e.target.select()} onBlur={e => commitMinute(e.target.value)} onKeyDown={e => { if (e.key === "Enter") commitMinute(e.target.value); }} placeholder="00" />
       <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: `1px solid ${c.inputBorder}` }}>
         {["AM", "PM"].map(ap => (
-          <button
-            key={ap}
-            type="button"
-            onClick={() => emit(parsed.date, parsed.hour, parsed.minute, ap)}
-            style={{
-              padding: "7px 13px", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-              background: parsed.ampm === ap ? c.accent : c.input,
-              color: parsed.ampm === ap ? "#fff" : c.muted,
-              transition: "all 0.15s",
-            }}
-          >
-            {ap}
-          </button>
+          <button key={ap} type="button" onClick={() => emit(parsed.date, parsed.hour, parsed.minute, ap)} style={{ padding: "7px 13px", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, background: parsed.ampm === ap ? c.accent : c.input, color: parsed.ampm === ap ? "#fff" : c.muted, transition: "all 0.15s" }}>{ap}</button>
         ))}
       </div>
-      {value && (
-        <button type="button" onClick={() => onChange("")} style={{ ...s.iconBtn(c.muted), fontSize: 12 }}>✕</button>
-      )}
+      {value && <button type="button" onClick={() => onChange("")} style={{ ...s.iconBtn(c.muted), fontSize: 12 }}>✕</button>}
     </div>
   );
 }
 
-// ── Main App ──────────────────────────────────────────────────────────────────
 export default function NoteApp() {
   const [dark, setDark] = useState(true);
   const c = dark ? T.dark : T.light;
@@ -256,7 +211,7 @@ export default function NoteApp() {
   const [gcalModal, setGcalModal] = useState(false);
   const [gcalEvents, setGcalEvents] = useState([]);
   const [gcalLoading, setGcalLoading] = useState(false);
-  const [gcalToken, setGcalToken] = useState(null); // [{id, noteId, title}]
+  const [gcalToken, setGcalToken] = useState(null);
   const [addTabModal, setAddTabModal] = useState(false);
   const [addTabFromNote, setAddTabFromNote] = useState(false);
   const [newTabName, setNewTabName] = useState("");
@@ -281,7 +236,6 @@ export default function NoteApp() {
   const recognitionRef = useRef(null);
   const firedReminders = useRef(new Set());
 
-  // ── Auth ──────────────────────────────────────────────────────────────────────
   useEffect(() => {
     sb.auth.getSession().then(({ data }) => { setSession(data.session); setAuthLoading(false); });
     const { data: { subscription } } = sb.auth.onAuthStateChange((_e, session) => { setSession(session); });
@@ -292,7 +246,6 @@ export default function NoteApp() {
 
   const signOut = async () => { await sb.auth.signOut(); setNotes([]); setCategories([]); };
 
-  // ── Load data ─────────────────────────────────────────────────────────────────
   const loadCategories = async () => {
     const { data } = await sb.from("categories").select("*").order("position");
     if (data) setCategories(data);
@@ -318,17 +271,13 @@ export default function NoteApp() {
     setDbLoading(false);
   };
 
-  // ── Categories CRUD ───────────────────────────────────────────────────────────
   const addTab = async (fromNote = false) => {
     if (!newTabName.trim()) return;
     const pos = categories.length;
     const { data } = await sb.from("categories").insert({ label: newTabName.trim(), position: pos, user_id: session.user.id }).select().single();
     if (data) {
       setCategories(cats => [...cats, data]);
-      if (fromNote) {
-        // auto-select the new category in the note form
-        setForm(f => ({ ...f, tabs: [...f.tabs, data.id] }));
-      }
+      if (fromNote) setForm(f => ({ ...f, tabs: [...f.tabs, data.id] }));
     }
     setNewTabName("");
     setAddTabModal(false);
@@ -347,7 +296,6 @@ export default function NoteApp() {
     setEditingTabId(null);
   };
 
-  // tab drag
   const onTabDragStart = (e, id) => { setDragTabId(id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", id); };
   const onTabDragOver = (e, id) => { e.preventDefault(); setDragOverTabId(id); };
   const onTabDrop = async (e, targetId) => {
@@ -364,9 +312,7 @@ export default function NoteApp() {
     });
   };
 
-  // ── Drop note onto category tab ───────────────────────────────────────────
   const onCategoryDragOver = (e, tabId) => {
-    // only respond if a note is being dragged (not a tab)
     if (!_dragNoteId) return;
     e.preventDefault();
     setDragOverCategoryId(tabId);
@@ -379,7 +325,6 @@ export default function NoteApp() {
     if (!noteId) return;
     const note = notes.find(n => n.id === noteId);
     if (!note) return;
-    // add category if not already assigned
     const newTabs = note.tabs.includes(tabId) ? note.tabs : [...note.tabs, tabId];
     await updateNote(noteId, { tabs: newTabs }, `Added to ${tabs.find(t => t.id === tabId)?.label}`);
   };
@@ -442,14 +387,11 @@ export default function NoteApp() {
   const restoreFromCompleted = (id) => updateNote(id, { completed: false }, "Restored from completed");
   const inlineSaveNote = (id, patch) => updateNote(id, patch, "Inline edit");
 
-  // ── Note drag ─────────────────────────────────────────────────────────────────
   const handleDragStart = useCallback((e, id) => {
     _dragNoteId = id;
     setDraggingNoteId(id);
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", id);
-    // Replace the browser's drag ghost with an invisible 1x1 pixel
-    // so the full note card doesn't obscure the sidebar categories
     const ghost = document.createElement("div");
     ghost.style.cssText = "width:1px;height:1px;opacity:0;position:fixed;top:-9999px";
     document.body.appendChild(ghost);
@@ -474,11 +416,9 @@ export default function NoteApp() {
   }, []);
   const handleDragEnd = useCallback(() => { _dragNoteId = null; setDraggingNoteId(null); setDragOverNoteId(null); }, []);
 
-  // ── Files ─────────────────────────────────────────────────────────────────────
   const readFile = (file) => new Promise(res => { const r = new FileReader(); r.onload = e => res({ id: uid(), name: file.name, type: file.type, url: e.target.result, base64: e.target.result.split(",")[1] }); r.readAsDataURL(file); });
   const handleFiles = async (files) => { const atts = await Promise.all(Array.from(files).map(readFile)); setForm(f => ({ ...f, attachments: [...f.attachments, ...atts] })); };
 
-  // ── Voice ─────────────────────────────────────────────────────────────────────
   const startListening = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return alert("Use Chrome or Edge for voice dictation.");
@@ -488,7 +428,6 @@ export default function NoteApp() {
     recognitionRef.current = r; r.start(); setListening(true);
   };
 
-  // ── OCR ───────────────────────────────────────────────────────────────────────
   const handleOcrFile = async (file) => {
     setOcrLoading(true);
     const att = await readFile(file);
@@ -519,7 +458,6 @@ export default function NoteApp() {
     rem.length === 0 ? setScanReviewModal(null) : setScanReviewModal(rem);
   };
 
-  // ── Camera ────────────────────────────────────────────────────────────────────
   const openCamera = async () => {
     setCameraModal(true);
     try {
@@ -536,7 +474,6 @@ export default function NoteApp() {
   };
   useEffect(() => () => streamRef.current?.getTracks().forEach(t => t.stop()), []);
 
-  // ── Reminder polling ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!session) return;
     const check = () => {
@@ -544,7 +481,6 @@ export default function NoteApp() {
       notes.forEach(note => {
         if (!note.reminder || note.trashed || note.completed) return;
         const reminderTs = new Date(note.reminder).getTime();
-        // fire if reminder is within the last 30s window and hasn't fired yet
         if (reminderTs <= now && reminderTs > now - 30000 && !firedReminders.current.has(note.id)) {
           firedReminders.current.add(note.id);
           playChime();
@@ -552,12 +488,11 @@ export default function NoteApp() {
         }
       });
     };
-    check(); // run immediately on mount/notes change
+    check();
     const interval = setInterval(check, 30000);
     return () => clearInterval(interval);
   }, [notes, session]);
 
-  // ── Sharing ───────────────────────────────────────────────────────────────────
   const generateLink = async (id) => {
     const link = `${window.location.origin}/shared/${id}?token=${uid()}`;
     await sb.from("notes").update({ share_link: link }).eq("id", id);
@@ -576,17 +511,14 @@ export default function NoteApp() {
     setNotes(ns => ns.map(n => n.id === id ? { ...n, sharedWith: n.sharedWith.filter(s => s.email !== email) } : n));
   };
 
-  // ── Reminder alert handlers ───────────────────────────────────────────────
   const dismissAlert = (alertId) => setReminderAlerts(prev => prev.filter(a => a.alertId !== alertId));
   const snoozeAlert = (alertId, noteId) => {
     dismissAlert(alertId);
-    // snooze 10 min: update reminder on the note to now+10min, allow it to re-fire
     const newReminder = new Date(Date.now() + 10 * 60 * 1000).toISOString().slice(0, 16);
     firedReminders.current.delete(noteId);
     updateNote(noteId, { reminder: newReminder }, null);
   };
 
-  // ── Google Calendar ───────────────────────────────────────────────────────
   const connectGoogleCalendar = () => {
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
@@ -607,7 +539,7 @@ export default function NoteApp() {
           setGcalToken(token);
           fetchGcalEvents(token);
         }
-      } catch (e) { /* cross-origin, keep polling */ }
+      } catch (e) { }
     }, 500);
   };
 
@@ -615,9 +547,7 @@ export default function NoteApp() {
     setGcalLoading(true);
     const now = new Date().toISOString();
     const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-    const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${now}&timeMax=${future}&singleEvents=true&orderBy=startTime&maxResults=30`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${now}&timeMax=${future}&singleEvents=true&orderBy=startTime&maxResults=30`, { headers: { Authorization: `Bearer ${token}` } });
     const data = await res.json();
     setGcalEvents(data.items || []);
     setGcalLoading(false);
@@ -631,17 +561,13 @@ export default function NoteApp() {
     const description = event.description ? `\n${event.description}` : "";
     const body = `${location}${fmt(new Date(start).getTime())}${description}`.trim();
     const reminder = event.start?.dateTime ? new Date(start).toISOString().slice(0, 16) : null;
-    const { data: newNote } = await sb.from("notes").insert({
-      title, body, priority: false, tabs: [], position: 0,
-      reminder, user_id: session.user.id,
-    }).select().single();
+    const { data: newNote } = await sb.from("notes").insert({ title, body, priority: false, tabs: [], position: 0, reminder, user_id: session.user.id }).select().single();
     if (newNote) {
       await sb.from("note_history").insert({ note_id: newNote.id, user_id: session.user.id, action: "Imported from Google Calendar" });
       await loadNotes();
     }
   };
 
-  // ── .ics file drop handler ────────────────────────────────────────────────
   const importIcsFile = async (file) => {
     const text = await file.text();
     const getValue = (key) => { const m = text.match(new RegExp(`${key}[^:]*:(.+)`)); return m ? m[1].trim() : ""; };
@@ -656,10 +582,7 @@ export default function NoteApp() {
       reminder = `${y}-${mo}-${d}T${h}:${mi}`;
     }
     const bodyParts = [location && `📍 ${location}`, reminder && fmt(new Date(reminder).getTime()), description].filter(Boolean);
-    const { data: newNote } = await sb.from("notes").insert({
-      title, body: bodyParts.join("\n"), priority: false, tabs: [],
-      position: 0, reminder, user_id: session.user.id,
-    }).select().single();
+    const { data: newNote } = await sb.from("notes").insert({ title, body: bodyParts.join("\n"), priority: false, tabs: [], position: 0, reminder, user_id: session.user.id }).select().single();
     if (newNote) {
       await sb.from("note_history").insert({ note_id: newNote.id, user_id: session.user.id, action: "Imported from .ics file" });
       await loadNotes();
@@ -667,7 +590,6 @@ export default function NoteApp() {
     }
   };
 
-  // ── Filter & sort ─────────────────────────────────────────────────────────────
   const countForTab = (tabId) => {
     if (tabId === "uncategorized") return notes.filter(n => !n.completed && !n.trashed && n.tabs.length === 0).length;
     return notes.filter(n => !n.completed && !n.trashed && (tabId === "all" || n.tabs.includes(tabId))).length;
@@ -689,11 +611,11 @@ export default function NoteApp() {
   });
   const fileIcon = (type) => type?.startsWith("image/") ? "🖼️" : type === "application/pdf" ? "📄" : type?.includes("word") || type?.includes("doc") ? "📝" : "📎";
 
-  // ── Styles ────────────────────────────────────────────────────────────────────
   const s = {
-    app: { display: "flex", height: "100vh", width: "100vw",  background: c.bg, color: c.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", overflow: "hidden", fontSize: 14 },
+    app: { display: "flex", height: "100vh", width: "100vw", background: c.bg, color: c.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", overflow: "hidden", fontSize: 14 },
     sidebar: { width: 220, minWidth: 220, background: c.sidebar, borderRight: `1px solid ${c.border}`, display: "flex", flexDirection: "column" },
-    tabRow: (active, dragOver) => ({ display: "flex", alignItems: "center", padding: "9px 16px", fontSize: 13.5, fontWeight: active || dragOver ? 700 : 400, color: dragOver ? "#fff" : active ? c.accent : c.text, background: dragOver ? c.accent : active ? c.accentSoft : "transparent", borderLeft: `3px solid ${active || dragOver ? c.accent : "transparent"}`, borderRadius: dragOver ? 8 : 0, margin: dragOver ? "0 6px" : "0", transition: "all 0.12s", userSelect: "none", gap: 6, boxShadow: dragOver ? `0 2px 12px ${c.accent}66` : "none" }),
+    // CHANGE: sidebar tab font bumped to 16px
+    tabRow: (active, dragOver) => ({ display: "flex", alignItems: "center", padding: "9px 16px", fontSize: 16, fontWeight: active || dragOver ? 700 : 400, color: dragOver ? "#fff" : active ? c.accent : c.text, background: dragOver ? c.accent : active ? c.accentSoft : "transparent", borderLeft: `3px solid ${active || dragOver ? c.accent : "transparent"}`, borderRadius: dragOver ? 8 : 0, margin: dragOver ? "0 6px" : "0", transition: "all 0.12s", userSelect: "none", gap: 6, boxShadow: dragOver ? `0 2px 12px ${c.accent}66` : "none" }),
     main: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" },
     topbar: { padding: "13px 20px", borderBottom: `1px solid ${c.border}`, display: "flex", alignItems: "center", gap: 8, background: c.sidebar, flexWrap: "wrap" },
     searchWrap: { flex: 1, minWidth: 160, display: "flex", alignItems: "center", gap: 8, background: c.input, border: `1px solid ${c.inputBorder}`, borderRadius: 10, padding: "7px 12px" },
@@ -709,11 +631,11 @@ export default function NoteApp() {
     mbox: { background: c.card, border: `1px solid ${c.border}`, borderRadius: 18, padding: 24, width: "100%", maxWidth: 540, maxHeight: "90vh", overflowY: "auto" },
     inp: { width: "100%", background: c.input, border: `1px solid ${c.inputBorder}`, borderRadius: 9, padding: "9px 12px", color: c.text, fontSize: 13.5, outline: "none", boxSizing: "border-box" },
     ta: { width: "100%", background: c.input, border: `1px solid ${c.inputBorder}`, borderRadius: 9, padding: "9px 12px", color: c.text, fontSize: 13.5, outline: "none", boxSizing: "border-box", resize: "vertical", minHeight: 72, fontFamily: "inherit" },
-    // ── CHANGE #5: bigger, clearer form labels ─────────────────────────────────
     lbl: { fontSize: 13, fontWeight: 700, color: c.text, letterSpacing: "0.01em", marginBottom: 7, display: "block" },
     div: { height: 1, background: c.border, margin: "10px 0" },
     badge: (col) => ({ background: col || c.accent, color: "#fff", borderRadius: 20, padding: "1px 7px", fontSize: 11, fontWeight: 600, flexShrink: 0 }),
     mediaPill: (hover) => ({ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 20px", borderRadius: 50, border: `1.5px solid ${hover ? c.accent : c.inputBorder}`, background: hover ? c.accentSoft : c.input, color: hover ? c.accent : c.text, cursor: "pointer", fontSize: 13.5, fontWeight: 500, transition: "all 0.15s", userSelect: "none" }),
+    tag: { display: "inline-flex", alignItems: "center", gap: 4, background: c.tag, color: c.tagText, borderRadius: 6, padding: "2px 8px", fontSize: 11.5, fontWeight: 500 },
   };
 
   if (authLoading) return <div style={{ ...s.app, alignItems: "center", justifyContent: "center" }}><div style={{ color: c.muted }}>Loading…</div></div>;
@@ -723,9 +645,15 @@ export default function NoteApp() {
     <div style={s.app}>
       {/* ── sidebar ── */}
       <div style={s.sidebar}>
-        <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${c.border}` }}>
-          <div style={{ fontSize: 17, fontWeight: 800, color: c.accent, letterSpacing: "-0.5px" }}>📋 NoteFlow</div>
-          <div style={{ fontSize: 11, color: c.muted, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.user.email}</div>
+        {/* CHANGE: Logo replaced with webp image + styled wordmark */}
+        <div style={{ padding: "14px 16px 12px", borderBottom: `1px solid ${c.border}`, display: "flex", alignItems: "center", gap: 10 }}>
+          <img src="/Logo_5_26b.webp" alt="NoteFlow" style={{ width: 38, height: 38, borderRadius: 9, objectFit: "cover", flexShrink: 0 }} />
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: "-0.5px", lineHeight: 1.1 }}>
+              <span style={{ color: c.text }}>Note</span><span style={{ color: c.accent }}>Flow</span>
+            </div>
+            <div style={{ fontSize: 11, color: c.muted, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 148 }}>{session.user.email}</div>
+          </div>
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", paddingTop: 6 }}>
@@ -743,11 +671,8 @@ export default function NoteApp() {
                   draggable={!t.fixed}
                   onDragStart={t.fixed ? undefined : e => onTabDragStart(e, t.id)}
                   onDragOver={e => {
-                    // tab reordering only for non-fixed tabs dragging tabs
                     if (!t.fixed && !_dragNoteId) onTabDragOver(e, t.id);
-                    // note-to-category drop works on ALL non-fixed category tabs
                     if (!t.fixed) onCategoryDragOver(e, t.id);
-                    // still need preventDefault so drop fires
                     if (_dragNoteId && !t.fixed) e.preventDefault();
                   }}
                   onDragLeave={onCategoryDragLeave}
@@ -757,10 +682,7 @@ export default function NoteApp() {
                   }}
                   onDragEnd={() => { setDragTabId(null); setDragOverTabId(null); setDragOverCategoryId(null); }}
                   style={{
-                    ...s.tabRow(
-                      view === "all" && activeTab === t.id,
-                      (dragOverTabId === t.id && dragTabId !== t.id) || dragOverCategoryId === t.id
-                    ),
+                    ...s.tabRow(view === "all" && activeTab === t.id, (dragOverTabId === t.id && dragTabId !== t.id) || dragOverCategoryId === t.id),
                     cursor: t.fixed ? "pointer" : "grab",
                   }}
                   onClick={() => { setActiveTab(t.id); setView("all"); }}
@@ -769,9 +691,7 @@ export default function NoteApp() {
                 >
                   {!t.fixed && <span style={{ color: dragOverCategoryId === t.id ? c.accent : c.muted, fontSize: 13, cursor: "grab" }}>⠿</span>}
                   <span style={{ flex: 1 }}>{t.label}</span>
-                  {dragOverCategoryId === t.id && (
-                    <span style={{ fontSize: 11, color: c.accent, fontWeight: 700, marginRight: 2 }}>+ Assign</span>
-                  )}
+                  {dragOverCategoryId === t.id && <span style={{ fontSize: 11, color: c.accent, fontWeight: 700, marginRight: 2 }}>+ Assign</span>}
                   <span style={s.badge()}>{countForTab(t.id)}</span>
                   {!t.fixed && (
                     <span style={{ marginLeft: 4 }}>
@@ -873,7 +793,8 @@ export default function NoteApp() {
                   onDelete={() => deletePermanently(note.id)} onToggleComplete={() => toggleComplete(note.id, note.completed)}
                   onTogglePriority={() => togglePriority(note.id, note.priority)} onShare={() => setShareModal(note)}
                   onHistory={() => setHistoryModal(note)}
-                  onRestore={() => view === "trash" ? restoreFromTrash(note.id) : restoreFromCompleted(note.id)} />
+                  onRestore={() => view === "trash" ? restoreFromTrash(note.id) : restoreFromCompleted(note.id)}
+                  onInlineSave={inlineSaveNote} />
               ))}
             </div>
           )}
@@ -1040,8 +961,7 @@ export default function NoteApp() {
                     >
                       <div style={{ fontSize: 13.5, fontWeight: 600, color: c.text }}>{event.summary || "Untitled Event"}</div>
                       <div style={{ fontSize: 12, color: c.muted, marginTop: 3 }}>
-                        📅 {dateStr}
-                        {event.location && <span> · 📍 {event.location}</span>}
+                        📅 {dateStr}{event.location && <span> · 📍 {event.location}</span>}
                       </div>
                       {event.description && <div style={{ fontSize: 12, color: c.muted, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{event.description}</div>}
                     </div>
@@ -1056,87 +976,49 @@ export default function NoteApp() {
       {/* ── reminder alert banners ── */}
       <div style={{ position: "fixed", top: 20, right: 20, zIndex: 9999, display: "flex", flexDirection: "column", gap: 10, maxWidth: 360, width: "calc(100vw - 40px)" }}>
         {reminderAlerts.map(alert => (
-          <ReminderBanner
-            key={alert.alertId}
-            alert={alert}
-            c={c}
+          <ReminderBanner key={alert.alertId} alert={alert} c={c}
             onDismiss={() => dismissAlert(alert.alertId)}
             onSnooze={() => snoozeAlert(alert.alertId, alert.noteId)}
-            onOpen={() => { dismissAlert(alert.alertId); const note = notes.find(n => n.id === alert.noteId); if (note) openEdit(note); }}
-          />
+            onOpen={() => { dismissAlert(alert.alertId); const note = notes.find(n => n.id === alert.noteId); if (note) openEdit(note); }} />
         ))}
       </div>
     </div>
   );
 }
 
-// ── Reminder Banner ───────────────────────────────────────────────────────────
 function ReminderBanner({ alert, c, onDismiss, onSnooze, onOpen }) {
   const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    // small delay so the CSS transition plays on mount
-    const t = setTimeout(() => setVisible(true), 30);
-    return () => clearTimeout(t);
-  }, []);
-
+  useEffect(() => { const t = setTimeout(() => setVisible(true), 30); return () => clearTimeout(t); }, []);
   const dismiss = () => { setVisible(false); setTimeout(onDismiss, 300); };
   const snooze = () => { setVisible(false); setTimeout(onSnooze, 300); };
   const open = () => { setVisible(false); setTimeout(onOpen, 300); };
-
   return (
-    <div style={{
-      background: c.card,
-      border: `1.5px solid ${c.accent}`,
-      borderRadius: 16,
-      padding: "14px 16px",
-      boxShadow: `0 8px 32px rgba(0,0,0,0.35), 0 0 0 1px ${c.accent}33`,
-      transform: visible ? "translateX(0)" : "translateX(120%)",
-      opacity: visible ? 1 : 0,
-      transition: "transform 0.3s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease",
-      display: "flex",
-      flexDirection: "column",
-      gap: 10,
-    }}>
-      {/* header row */}
+    <div style={{ background: c.card, border: `1.5px solid ${c.accent}`, borderRadius: 16, padding: "14px 16px", boxShadow: `0 8px 32px rgba(0,0,0,0.35), 0 0 0 1px ${c.accent}33`, transform: visible ? "translateX(0)" : "translateX(120%)", opacity: visible ? 1 : 0, transition: "transform 0.3s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease", display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
         <div style={{ fontSize: 22, lineHeight: 1, flexShrink: 0, marginTop: 1 }}>⏰</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 3 }}>Reminder</div>
           <div style={{ fontSize: 14, fontWeight: 700, color: c.text, lineHeight: 1.3 }}>{alert.title}</div>
-          {alert.body && (
-            <div style={{ fontSize: 12.5, color: c.muted, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
-              {alert.body}
-            </div>
-          )}
+          {alert.body && <div style={{ fontSize: 12.5, color: c.muted, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{alert.body}</div>}
         </div>
         <button onClick={dismiss} style={{ background: "none", border: "none", cursor: "pointer", color: c.muted, padding: 2, flexShrink: 0, fontSize: 16, lineHeight: 1 }}>✕</button>
       </div>
-      {/* action row */}
       <div style={{ display: "flex", gap: 7 }}>
-        <button onClick={open} style={{ flex: 1, padding: "7px 0", background: c.accent, color: "#fff", border: "none", borderRadius: 9, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
-          Open Note
-        </button>
-        <button onClick={snooze} style={{ flex: 1, padding: "7px 0", background: c.accentSoft, color: c.accent, border: "none", borderRadius: 9, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
-          Snooze 10 min
-        </button>
-        <button onClick={dismiss} style={{ padding: "7px 12px", background: "none", color: c.muted, border: `1px solid ${c.border}`, borderRadius: 9, fontSize: 12.5, fontWeight: 500, cursor: "pointer" }}>
-          Dismiss
-        </button>
+        <button onClick={open} style={{ flex: 1, padding: "7px 0", background: c.accent, color: "#fff", border: "none", borderRadius: 9, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>Open Note</button>
+        <button onClick={snooze} style={{ flex: 1, padding: "7px 0", background: c.accentSoft, color: c.accent, border: "none", borderRadius: 9, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>Snooze 10 min</button>
+        <button onClick={dismiss} style={{ padding: "7px 12px", background: "none", color: c.muted, border: `1px solid ${c.border}`, borderRadius: 9, fontSize: 12.5, fontWeight: 500, cursor: "pointer" }}>Dismiss</button>
       </div>
     </div>
   );
 }
 
-// ── NoteForm ──────────────────────────────────────────────────────────────────
 function NoteForm({ form, setForm, s, c, tabs, listening, startListening, ocrLoading, ocrPreview, fileRef, ocrFileRef, handleFiles, handleOcrFile, openCamera, dropActive, setDropActive, onAddCategory }) {
   const [uploadHover, setUploadHover] = useState(false);
   const [cameraHover, setCameraHover] = useState(false);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div>
-        {/* CHANGE #5: bigger label */}
         <label style={s.lbl}>Title</label>
-        {/* CHANGE #3: autoFocus so cursor lands here immediately */}
         <input autoFocus style={s.inp} placeholder="Note title…" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
       </div>
       <div>
@@ -1169,14 +1051,9 @@ function NoteForm({ form, setForm, s, c, tabs, listening, startListening, ocrLoa
         {ocrPreview && <img src={ocrPreview} alt="scanned" style={{ marginTop: 8, maxHeight: 100, borderRadius: 8, border: `1px solid ${c.border}`, display: "block" }} />}
       </div>
       <div>
-        {/* CHANGE #4: "Add Category" button inline in the categories section */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
           <label style={{ ...s.lbl, marginBottom: 0 }}>Categories</label>
-          <button
-            type="button"
-            onClick={onAddCategory}
-            style={{ ...s.btn("ghost"), padding: "3px 10px", fontSize: 12, border: `1px solid ${c.inputBorder}` }}
-          >
+          <button type="button" onClick={onAddCategory} style={{ ...s.btn("ghost"), padding: "3px 10px", fontSize: 12, border: `1px solid ${c.inputBorder}` }}>
             <Ico d="M12 5v14M5 12h14" size={12} /> New Category
           </button>
         </div>
@@ -1197,7 +1074,6 @@ function NoteForm({ form, setForm, s, c, tabs, listening, startListening, ocrLoa
         <Star filled={form.priority} size={17} onClick={() => setForm(f => ({ ...f, priority: !f.priority }))} /> Priority
       </label>
       <div>
-        {/* CHANGE #8: AM/PM reminder picker replaces datetime-local */}
         <label style={s.lbl}>Reminder</label>
         <ReminderPicker value={form.reminder} onChange={v => setForm(f => ({ ...f, reminder: v }))} s={s} c={c} />
       </div>
@@ -1214,7 +1090,7 @@ function NoteForm({ form, setForm, s, c, tabs, listening, startListening, ocrLoa
         {form.attachments.length > 0 && (
           <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
             {form.attachments.map(a => (
-              <span key={a.id} style={s.tag}>
+              <span key={a.id} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: c.tag, color: c.tagText, borderRadius: 6, padding: "2px 8px", fontSize: 11.5 }}>
                 {a.type?.startsWith("image/") ? "🖼️" : a.type === "application/pdf" ? "📄" : "📝"} {a.name.length > 18 ? a.name.slice(0, 18) + "…" : a.name}
                 <span style={{ cursor: "pointer", opacity: 0.5, marginLeft: 2 }} onClick={() => setForm(f => ({ ...f, attachments: f.attachments.filter(x => x.id !== a.id) }))}>✕</span>
               </span>
@@ -1226,7 +1102,6 @@ function NoteForm({ form, setForm, s, c, tabs, listening, startListening, ocrLoa
   );
 }
 
-// ── Scan Review Modal ─────────────────────────────────────────────────────────
 function ScanReviewModal({ reviewNotes, setReviewNotes, tabs, s, c, onAcceptAll, onAcceptOne, onDiscard }) {
   const [local, setLocal] = useState(reviewNotes);
   useEffect(() => setLocal(reviewNotes), [reviewNotes]);
@@ -1282,18 +1157,21 @@ function ScanReviewModal({ reviewNotes, setReviewNotes, tabs, s, c, onAcceptAll,
 }
 
 // ── Grid Card ─────────────────────────────────────────────────────────────────
+// CHANGE: single-click title = inline edit; double-click anywhere on card = open modal
 function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, fileIcon, onEdit, onTrash, onDelete, onToggleComplete, onTogglePriority, onShare, onHistory, onRestore, onInlineSave }) {
   const [hover, setHover] = useState(false);
-  const [editingField, setEditingField] = useState(null); // "title" | "body"
+  const [editingField, setEditingField] = useState(null);
   const [draft, setDraft] = useState({ title: note.title, body: note.body });
   const noteTabs = tabs.filter(t => note.tabs?.includes(t.id));
+  const clickTimer = useRef(null);
 
-  const startEdit = (field, e) => {
+  const startInlineEdit = (field, e) => {
     if (view !== "all") return;
     e.stopPropagation();
     setDraft({ title: note.title, body: note.body });
     setEditingField(field);
   };
+
   const commitEdit = () => {
     if (editingField && (draft.title !== note.title || draft.body !== note.body)) {
       onInlineSave(note.id, { title: draft.title, body: draft.body });
@@ -1301,55 +1179,74 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
     setEditingField(null);
   };
 
+  // Single click on title = inline edit; double click on card = open modal
+  const handleTitleClick = (e) => {
+    if (view !== "all") return;
+    e.stopPropagation();
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+      // double click — open modal
+      onEdit();
+    } else {
+      clickTimer.current = setTimeout(() => {
+        clickTimer.current = null;
+        // single click — inline edit
+        startInlineEdit("title", e);
+      }, 220);
+    }
+  };
+
+  const handleCardDoubleClick = (e) => {
+    if (view !== "all") return;
+    if (editingField) return;
+    onEdit();
+  };
+
   return (
     <div
       draggable={!editingField}
       onDragStart={editingField ? undefined : onDragStart}
       onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
+      onDoubleClick={handleCardDoubleClick}
       style={{ ...s.card(note.priority && view === "all", isDragging, isDragOver), background: isDragOver ? c.accentSoft : hover ? c.cardHover : c.card }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
         {view !== "trash" && (
-          <div onClick={onToggleComplete} style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${note.completed ? c.success : c.border}`, background: note.completed ? c.success : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, marginTop: 2, transition: "all 0.13s" }}>
+          <div onClick={e => { e.stopPropagation(); onToggleComplete(); }} style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${note.completed ? c.success : c.border}`, background: note.completed ? c.success : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, marginTop: 2, transition: "all 0.13s" }}>
             {note.completed && <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>}
           </div>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
           {editingField === "title" ? (
-            <input
-              autoFocus
-              style={{ ...s.inp, padding: "2px 6px", fontSize: 14, fontWeight: 600, width: "100%" }}
+            <input autoFocus style={{ ...s.inp, padding: "2px 6px", fontSize: 17, fontWeight: 600, width: "100%" }}
               value={draft.title}
               onChange={e => setDraft(d => ({ ...d, title: e.target.value }))}
               onBlur={commitEdit}
               onKeyDown={e => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") setEditingField(null); }}
-              onClick={e => e.stopPropagation()}
-            />
+              onClick={e => e.stopPropagation()} />
           ) : (
             <div
-              onClick={e => startEdit("title", e)}
-              title={view === "all" ? "Click to edit title" : ""}
-              style={{ fontSize: 14, fontWeight: 600, textDecoration: note.completed ? "line-through" : "none", opacity: note.completed ? 0.55 : 1, cursor: view === "all" ? "text" : "default", borderRadius: 4, padding: "1px 2px", transition: "background 0.1s" }}
+              onClick={handleTitleClick}
+              title={view === "all" ? "Click to edit title · Double-click to open" : ""}
+              style={{ fontSize: 17, fontWeight: 600, textDecoration: note.completed ? "line-through" : "none", opacity: note.completed ? 0.55 : 1, cursor: view === "all" ? "text" : "default", borderRadius: 4, padding: "1px 2px", transition: "background 0.1s" }}
             >{note.title}</div>
           )}
         </div>
-        <Star filled={note.priority} size={15} onClick={onTogglePriority} />
+        <Star filled={note.priority} size={15} onClick={e => { e.stopPropagation(); onTogglePriority(); }} />
       </div>
 
       {editingField === "body" ? (
-        <textarea
-          autoFocus
-          style={{ ...s.ta, fontSize: 13, minHeight: 60 }}
+        <textarea autoFocus style={{ ...s.ta, fontSize: 13, minHeight: 60 }}
           value={draft.body}
           onChange={e => setDraft(d => ({ ...d, body: e.target.value }))}
           onBlur={commitEdit}
           onKeyDown={e => { if (e.key === "Escape") setEditingField(null); }}
-          onClick={e => e.stopPropagation()}
-        />
+          onClick={e => e.stopPropagation()} />
       ) : (
         <div
-          onClick={e => startEdit("body", e)}
-          title={view === "all" ? "Click to edit" : ""}
+          onClick={e => startInlineEdit("body", e)}
+          title={view === "all" ? "Click to edit · Double-click card to open" : ""}
           style={{ fontSize: 13, color: note.body ? c.muted : c.inputBorder, lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", cursor: view === "all" ? "text" : "default", borderRadius: 4, padding: "1px 2px", minHeight: 18, transition: "background 0.1s" }}
         >{note.body || (view === "all" && hover ? "Click to add body…" : "")}</div>
       )}
@@ -1361,16 +1258,16 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
       {(note.sharedWith?.length > 0 || note.shareLink) && <div style={{ fontSize: 12, color: c.accent }}>🔗 Shared{note.sharedWith?.length > 0 ? ` with ${note.sharedWith.length}` : " via link"}</div>}
       <div style={{ display: "flex", gap: 2, paddingTop: 8, borderTop: `1px solid ${c.border}`, alignItems: "center" }}>
         {view === "trash" ? (<>
-          <button style={s.iconBtn(c.success)} title="Restore" onClick={onRestore}><Ico d="M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" /></button>
-          <button style={s.iconBtn(c.danger)} title="Delete forever" onClick={onDelete}><Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></button>
+          <button style={s.iconBtn(c.success)} title="Restore" onClick={e => { e.stopPropagation(); onRestore(); }}><Ico d="M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" /></button>
+          <button style={s.iconBtn(c.danger)} title="Delete forever" onClick={e => { e.stopPropagation(); onDelete(); }}><Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></button>
         </>) : view === "completed" ? (<>
-          <button style={s.iconBtn(c.success)} title="Restore" onClick={onRestore}><Ico d="M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" /></button>
-          <button style={s.iconBtn(c.danger)} title="Move to trash" onClick={onTrash}><Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></button>
+          <button style={s.iconBtn(c.success)} title="Restore" onClick={e => { e.stopPropagation(); onRestore(); }}><Ico d="M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" /></button>
+          <button style={s.iconBtn(c.danger)} title="Move to trash" onClick={e => { e.stopPropagation(); onTrash(); }}><Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></button>
         </>) : (<>
-          <button style={s.iconBtn()} title="Edit" onClick={onEdit}><Ico d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></button>
-          <button style={s.iconBtn()} title="Share" onClick={onShare}><Ico d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13" /></button>
-          <button style={s.iconBtn()} title="History" onClick={onHistory}><Ico d="M12 8v4l3 3M3.05 11a9 9 0 1017.9 0" /></button>
-          <button style={{ ...s.iconBtn(c.danger), marginLeft: "auto" }} title="Trash" onClick={onTrash}><Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></button>
+          <button style={s.iconBtn()} title="Edit" onClick={e => { e.stopPropagation(); onEdit(); }}><Ico d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></button>
+          <button style={s.iconBtn()} title="Share" onClick={e => { e.stopPropagation(); onShare(); }}><Ico d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13" /></button>
+          <button style={s.iconBtn()} title="History" onClick={e => { e.stopPropagation(); onHistory(); }}><Ico d="M12 8v4l3 3M3.05 11a9 9 0 1017.9 0" /></button>
+          <button style={{ ...s.iconBtn(c.danger), marginLeft: "auto" }} title="Trash" onClick={e => { e.stopPropagation(); onTrash(); }}><Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></button>
         </>)}
         <div style={{ fontSize: 11, color: c.muted, marginLeft: view !== "all" ? "auto" : 0 }}>{fmt(note.createdAt)}</div>
       </div>
@@ -1379,41 +1276,82 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
 }
 
 // ── List Row ──────────────────────────────────────────────────────────────────
-function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, fileIcon, onEdit, onTrash, onDelete, onToggleComplete, onTogglePriority, onShare, onHistory, onRestore }) {
+// CHANGE: single-click title = inline edit; double-click row = open modal
+function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, fileIcon, onEdit, onTrash, onDelete, onToggleComplete, onTogglePriority, onShare, onHistory, onRestore, onInlineSave }) {
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(note.title);
+  const clickTimer = useRef(null);
   const noteTabs = tabs.filter(t => note.tabs?.includes(t.id));
+
+  const commitTitle = () => {
+    if (titleDraft.trim() && titleDraft !== note.title) {
+      if (onInlineSave) onInlineSave(note.id, { title: titleDraft });
+    }
+    setEditingTitle(false);
+  };
+
+  const handleTitleClick = (e) => {
+    if (view !== "all") return;
+    e.stopPropagation();
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+      onEdit();
+    } else {
+      clickTimer.current = setTimeout(() => {
+        clickTimer.current = null;
+        setTitleDraft(note.title);
+        setEditingTitle(true);
+      }, 220);
+    }
+  };
+
   return (
-    <div draggable onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
-      onDoubleClick={view === "all" ? onEdit : undefined}
+    <div draggable={!editingTitle} onDragStart={editingTitle ? undefined : onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
+      onDoubleClick={view === "all" && !editingTitle ? onEdit : undefined}
       style={{ ...s.listCard(note.priority && view === "all", isDragging, isDragOver) }}>
       {view !== "trash" && (
-        <div onClick={onToggleComplete} style={{ width: 17, height: 17, borderRadius: 5, border: `2px solid ${note.completed ? c.success : c.border}`, background: note.completed ? c.success : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, marginTop: 2 }}>
+        <div onClick={e => { e.stopPropagation(); onToggleComplete(); }} style={{ width: 17, height: 17, borderRadius: 5, border: `2px solid ${note.completed ? c.success : c.border}`, background: note.completed ? c.success : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, marginTop: 2 }}>
           {note.completed && <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>}
         </div>
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 13.5, fontWeight: 600, textDecoration: note.completed ? "line-through" : "none", opacity: note.completed ? 0.55 : 1 }}>{note.title}</span>
-          {noteTabs.map(t => <span key={t.id} style={{ ...s.tag, fontSize: 11 }}>{t.label}</span>)}
-          {(!note.tabs || note.tabs.length === 0) && view === "all" && <span style={{ ...s.tag, fontSize: 11, background: c.border, color: c.muted }}>Uncategorized</span>}
-          {note.attachments?.length > 0 && <span style={{ fontSize: 12, color: c.muted }}>{note.attachments.length} 📎</span>}
-          {note.reminder && <span style={{ fontSize: 11.5, color: c.muted }}>⏰ {new Date(note.reminder).toLocaleDateString()}</span>}
+          {editingTitle ? (
+            <input autoFocus style={{ ...s.inp, padding: "2px 6px", fontSize: 16, fontWeight: 600, width: "100%" }}
+              value={titleDraft}
+              onChange={e => setTitleDraft(e.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={e => { if (e.key === "Enter") commitTitle(); if (e.key === "Escape") setEditingTitle(false); }}
+              onClick={e => e.stopPropagation()} />
+          ) : (
+            // CHANGE: note title font bumped to 16px
+            <span onClick={handleTitleClick} title={view === "all" ? "Click to edit · Double-click row to open" : ""}
+              style={{ fontSize: 16, fontWeight: 600, textDecoration: note.completed ? "line-through" : "none", opacity: note.completed ? 0.55 : 1, cursor: view === "all" ? "text" : "default" }}>
+              {note.title}
+            </span>
+          )}
+          {!editingTitle && noteTabs.map(t => <span key={t.id} style={{ ...s.tag, fontSize: 11 }}>{t.label}</span>)}
+          {!editingTitle && (!note.tabs || note.tabs.length === 0) && view === "all" && <span style={{ ...s.tag, fontSize: 11, background: c.border, color: c.muted }}>Uncategorized</span>}
+          {!editingTitle && note.attachments?.length > 0 && <span style={{ fontSize: 12, color: c.muted }}>{note.attachments.length} 📎</span>}
+          {!editingTitle && note.reminder && <span style={{ fontSize: 11.5, color: c.muted }}>⏰ {new Date(note.reminder).toLocaleDateString()}</span>}
         </div>
         {note.body && <div style={{ fontSize: 12.5, color: c.muted, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "90%" }}>{note.body}</div>}
       </div>
       <div style={{ display: "flex", gap: 2, alignItems: "center", flexShrink: 0 }}>
-        <Star filled={note.priority} size={13} onClick={onTogglePriority} />
+        <Star filled={note.priority} size={13} onClick={e => { e.stopPropagation(); onTogglePriority(); }} />
         <span style={{ fontSize: 11, color: c.muted, marginRight: 4, marginLeft: 4 }}>{fmt(note.createdAt)}</span>
         {view === "trash" ? (<>
-          <button style={s.iconBtn(c.success)} onClick={onRestore}><Ico d="M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" /></button>
-          <button style={s.iconBtn(c.danger)} onClick={onDelete}><Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></button>
+          <button style={s.iconBtn(c.success)} onClick={e => { e.stopPropagation(); onRestore(); }}><Ico d="M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" /></button>
+          <button style={s.iconBtn(c.danger)} onClick={e => { e.stopPropagation(); onDelete(); }}><Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></button>
         </>) : view === "completed" ? (<>
-          <button style={s.iconBtn(c.success)} onClick={onRestore}><Ico d="M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" /></button>
-          <button style={s.iconBtn(c.danger)} onClick={onTrash}><Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></button>
+          <button style={s.iconBtn(c.success)} onClick={e => { e.stopPropagation(); onRestore(); }}><Ico d="M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" /></button>
+          <button style={s.iconBtn(c.danger)} onClick={e => { e.stopPropagation(); onTrash(); }}><Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></button>
         </>) : (<>
-          <button style={s.iconBtn()} onClick={onEdit}><Ico d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></button>
-          <button style={s.iconBtn()} onClick={onShare}><Ico d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13" /></button>
-          <button style={s.iconBtn()} onClick={onHistory}><Ico d="M12 8v4l3 3M3.05 11a9 9 0 1017.9 0" /></button>
-          <button style={s.iconBtn(c.danger)} onClick={onTrash}><Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></button>
+          <button style={s.iconBtn()} onClick={e => { e.stopPropagation(); onEdit(); }}><Ico d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></button>
+          <button style={s.iconBtn()} onClick={e => { e.stopPropagation(); onShare(); }}><Ico d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13" /></button>
+          <button style={s.iconBtn()} onClick={e => { e.stopPropagation(); onHistory(); }}><Ico d="M12 8v4l3 3M3.05 11a9 9 0 1017.9 0" /></button>
+          <button style={s.iconBtn(c.danger)} onClick={e => { e.stopPropagation(); onTrash(); }}><Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></button>
         </>)}
       </div>
     </div>

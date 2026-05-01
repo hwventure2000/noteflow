@@ -436,7 +436,19 @@ export default function NoteApp() {
   const inlineSaveNote = (id, patch) => updateNote(id, patch, "Inline edit");
 
   // ── Note drag ─────────────────────────────────────────────────────────────────
-  const handleDragStart = useCallback((e, id) => { _dragNoteId = id; setDraggingNoteId(id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", id); }, []);
+  const handleDragStart = useCallback((e, id) => {
+    _dragNoteId = id;
+    setDraggingNoteId(id);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", id);
+    // Replace the browser's drag ghost with an invisible 1x1 pixel
+    // so the full note card doesn't obscure the sidebar categories
+    const ghost = document.createElement("div");
+    ghost.style.cssText = "width:1px;height:1px;opacity:0;position:fixed;top:-9999px";
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, 0, 0);
+    setTimeout(() => document.body.removeChild(ghost), 0);
+  }, []);
   const handleDragOver = useCallback((e, id) => { e.preventDefault(); e.stopPropagation(); if (_dragNoteId && _dragNoteId !== id) setDragOverNoteId(id); }, []);
   const handleDrop = useCallback((e, targetId) => {
     e.preventDefault(); e.stopPropagation();

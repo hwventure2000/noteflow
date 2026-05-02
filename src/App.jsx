@@ -444,12 +444,10 @@ export default function NoteApp() {
     e.preventDefault(); e.stopPropagation();
     if (!_dragNoteId || _dragNoteId === id) return;
     setDragOverNoteId(id);
-    // Determine if mouse is in top or bottom half to pick insertion point
     const rect = e.currentTarget.getBoundingClientRect();
-    const midY = rect.top + rect.height / 2;
-    const midX = rect.left + rect.width / 2;
-    const isListMode = rect.width > 500; // rough heuristic
-    const isBefore = isListMode ? e.clientY < midY : e.clientX < midX;
+    // Grid cards are ~280px wide, list rows are full width — use width to distinguish
+    const isGrid = rect.width < 600;
+    const isBefore = isGrid ? e.clientX < rect.left + rect.width / 2 : e.clientY < rect.top + rect.height / 2;
     setDragOverIndex(isBefore ? index : index + 1);
   }, []);
   const handleDrop = useCallback((e, targetId) => {
@@ -874,43 +872,61 @@ export default function NoteApp() {
           ) : viewMode === "grid" ? (
             <div style={s.grid}>
               {sorted.map((note, index) => (
-                <NoteCard key={note.id} note={note} s={s} c={c} tabs={tabs} view={view}
-                  isDragging={draggingNoteId === note.id} isDragOver={false}
-                  insertBefore={dragOverIndex === index && draggingNoteId !== note.id}
-                  insertAfter={dragOverIndex === index + 1 && index === sorted.length - 1 && draggingNoteId !== note.id}
-                  onDragStart={e => handleDragStart(e, note.id)}
-                  onDragOver={e => handleDragOver(e, note.id, index)}
-                  onDrop={e => handleDrop(e, note.id)} onDragEnd={handleDragEnd}
-                  fileIcon={fileIcon} onEdit={() => openEdit(note)} onTrash={() => trashNote(note.id)}
-                  onDelete={() => deletePermanently(note.id)} onToggleComplete={() => toggleComplete(note.id, note.completed)}
-                  onTogglePriority={() => togglePriority(note.id, note.priority)} onShare={() => setShareModal(note)}
-                  onHistory={() => setHistoryModal(note)}
-                  onRestore={() => view === "trash" ? restoreFromTrash(note.id) : restoreFromCompleted(note.id)}
-                  onInlineSave={inlineSaveNote}
-                  catColor={getNoteColor(note)}
-                  selected={selectedNoteId === note.id}
-                  onSelect={() => setSelectedNoteId(note.id)} />
+                <div key={note.id} style={{ position: "relative" }}>
+                  {/* vertical line on LEFT edge — insert before this card */}
+                  {draggingNoteId && dragOverIndex === index && draggingNoteId !== note.id && (
+                    <div style={{ position: "absolute", left: -8, top: "10%", height: "80%", width: 3, borderRadius: 2, background: c.accent, boxShadow: `0 0 8px ${c.accent}`, zIndex: 10, pointerEvents: "none" }} />
+                  )}
+                  {/* vertical line on RIGHT edge — insert after last card */}
+                  {draggingNoteId && dragOverIndex === index + 1 && draggingNoteId !== note.id && (
+                    <div style={{ position: "absolute", right: -8, top: "10%", height: "80%", width: 3, borderRadius: 2, background: c.accent, boxShadow: `0 0 8px ${c.accent}`, zIndex: 10, pointerEvents: "none" }} />
+                  )}
+                  <NoteCard note={note} s={s} c={c} tabs={tabs} view={view}
+                    isDragging={draggingNoteId === note.id} isDragOver={false}
+                    insertBefore={false} insertAfter={false}
+                    onDragStart={e => handleDragStart(e, note.id)}
+                    onDragOver={e => handleDragOver(e, note.id, index)}
+                    onDrop={e => handleDrop(e, note.id)} onDragEnd={handleDragEnd}
+                    fileIcon={fileIcon} onEdit={() => openEdit(note)} onTrash={() => trashNote(note.id)}
+                    onDelete={() => deletePermanently(note.id)} onToggleComplete={() => toggleComplete(note.id, note.completed)}
+                    onTogglePriority={() => togglePriority(note.id, note.priority)} onShare={() => setShareModal(note)}
+                    onHistory={() => setHistoryModal(note)}
+                    onRestore={() => view === "trash" ? restoreFromTrash(note.id) : restoreFromCompleted(note.id)}
+                    onInlineSave={inlineSaveNote}
+                    catColor={getNoteColor(note)}
+                    selected={selectedNoteId === note.id}
+                    onSelect={() => setSelectedNoteId(note.id)} />
+                </div>
               ))}
             </div>
           ) : (
             <div style={s.listWrap}>
               {sorted.map((note, index) => (
-                <NoteListRow key={note.id} note={note} s={s} c={c} tabs={tabs} view={view}
-                  isDragging={draggingNoteId === note.id} isDragOver={false}
-                  insertBefore={dragOverIndex === index && draggingNoteId !== note.id}
-                  insertAfter={dragOverIndex === index + 1 && index === sorted.length - 1 && draggingNoteId !== note.id}
-                  onDragStart={e => handleDragStart(e, note.id)}
-                  onDragOver={e => handleDragOver(e, note.id, index)}
-                  onDrop={e => handleDrop(e, note.id)} onDragEnd={handleDragEnd}
-                  fileIcon={fileIcon} onEdit={() => openEdit(note)} onTrash={() => trashNote(note.id)}
-                  onDelete={() => deletePermanently(note.id)} onToggleComplete={() => toggleComplete(note.id, note.completed)}
-                  onTogglePriority={() => togglePriority(note.id, note.priority)} onShare={() => setShareModal(note)}
-                  onHistory={() => setHistoryModal(note)}
-                  onRestore={() => view === "trash" ? restoreFromTrash(note.id) : restoreFromCompleted(note.id)}
-                  onInlineSave={inlineSaveNote}
-                  catColor={getNoteColor(note)}
-                  selected={selectedNoteId === note.id}
-                  onSelect={() => setSelectedNoteId(note.id)} />
+                <div key={note.id} style={{ position: "relative" }}>
+                  {/* horizontal line ABOVE row — insert before */}
+                  {draggingNoteId && dragOverIndex === index && draggingNoteId !== note.id && (
+                    <div style={{ position: "absolute", top: -5, left: 0, right: 0, height: 3, borderRadius: 2, background: c.accent, boxShadow: `0 0 8px ${c.accent}`, zIndex: 10, pointerEvents: "none" }} />
+                  )}
+                  {/* horizontal line BELOW last row — insert after */}
+                  {draggingNoteId && dragOverIndex === index + 1 && index === sorted.length - 1 && draggingNoteId !== note.id && (
+                    <div style={{ position: "absolute", bottom: -5, left: 0, right: 0, height: 3, borderRadius: 2, background: c.accent, boxShadow: `0 0 8px ${c.accent}`, zIndex: 10, pointerEvents: "none" }} />
+                  )}
+                  <NoteListRow note={note} s={s} c={c} tabs={tabs} view={view}
+                    isDragging={draggingNoteId === note.id} isDragOver={false}
+                    insertBefore={false} insertAfter={false}
+                    onDragStart={e => handleDragStart(e, note.id)}
+                    onDragOver={e => handleDragOver(e, note.id, index)}
+                    onDrop={e => handleDrop(e, note.id)} onDragEnd={handleDragEnd}
+                    fileIcon={fileIcon} onEdit={() => openEdit(note)} onTrash={() => trashNote(note.id)}
+                    onDelete={() => deletePermanently(note.id)} onToggleComplete={() => toggleComplete(note.id, note.completed)}
+                    onTogglePriority={() => togglePriority(note.id, note.priority)} onShare={() => setShareModal(note)}
+                    onHistory={() => setHistoryModal(note)}
+                    onRestore={() => view === "trash" ? restoreFromTrash(note.id) : restoreFromCompleted(note.id)}
+                    onInlineSave={inlineSaveNote}
+                    catColor={getNoteColor(note)}
+                    selected={selectedNoteId === note.id}
+                    onSelect={() => setSelectedNoteId(note.id)} />
+                </div>
               ))}
             </div>
           )}

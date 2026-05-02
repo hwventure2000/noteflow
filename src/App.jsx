@@ -442,21 +442,27 @@ export default function NoteApp() {
   const handleDragOver = useCallback((e, id) => { e.preventDefault(); e.stopPropagation(); if (_dragNoteId && _dragNoteId !== id) setDragOverNoteId(id); }, []);
   const handleDrop = useCallback((e, targetId) => {
     e.preventDefault(); e.stopPropagation();
-    const sourceId = _dragNoteId; _dragNoteId = null; setDraggingNoteId(null); setDragOverNoteId(null);
+    // Read sourceId from dataTransfer as fallback — _dragNoteId may be cleared by dragEnd in some browsers
+    const sourceId = _dragNoteId || e.dataTransfer.getData("text/plain");
+    _dragNoteId = null;
+    setDraggingNoteId(null);
+    setDragOverNoteId(null);
     if (!sourceId || sourceId === targetId) return;
     setSortOrder("manual");
     setNotes(ns => {
-      // Work from the currently displayed sorted order so drop position matches what user sees
       const arr = [...ns].sort((a, b) => a.order - b.order);
-      const fi = arr.findIndex(n => n.id === sourceId), ti = arr.findIndex(n => n.id === targetId);
+      const fi = arr.findIndex(n => n.id === sourceId);
+      const ti = arr.findIndex(n => n.id === targetId);
       if (fi === -1 || ti === -1) return ns;
-      const [moved] = arr.splice(fi, 1); arr.splice(ti, 0, moved);
+      const [moved] = arr.splice(fi, 1);
+      arr.splice(ti, 0, moved);
       const updated = arr.map((n, i) => ({ ...n, order: i }));
       updated.forEach(n => sb.from("notes").update({ position: n.order }).eq("id", n.id));
       return updated;
     });
   }, []);
-  const handleDragEnd = useCallback(() => { _dragNoteId = null; setDraggingNoteId(null); setDragOverNoteId(null); }, []);
+  // dragEnd fires after drop — just clean up visuals, don't clear _dragNoteId here
+  const handleDragEnd = useCallback(() => { setDraggingNoteId(null); setDragOverNoteId(null); }, []);
 
   const readFile = (file) => new Promise(res => { const r = new FileReader(); r.onload = e => res({ id: uid(), name: file.name, type: file.type, url: e.target.result, base64: e.target.result.split(",")[1] }); r.readAsDataURL(file); });
   const handleFiles = async (files) => { const atts = await Promise.all(Array.from(files).map(readFile)); setForm(f => ({ ...f, attachments: [...f.attachments, ...atts] })); };
@@ -650,8 +656,8 @@ export default function NoteApp() {
     return true;
   });
   const sorted = [...visibleNotes].sort((a, b) => {
-    if (view === "all" && a.priority !== b.priority) return a.priority ? -1 : 1;
     if (sortOrder === "manual") return a.order - b.order;
+    if (view === "all" && a.priority !== b.priority) return a.priority ? -1 : 1;
     if (sortOrder === "newToOld") return b.createdAt - a.createdAt;
     return a.createdAt - b.createdAt;
   });

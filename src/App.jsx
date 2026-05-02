@@ -208,6 +208,7 @@ export default function NoteApp() {
   const [selectedNoteId, setSelectedNoteId] = useState(null);
   const [viewMode, setViewMode] = useState("grid");
   const [dragOverNoteId, setDragOverNoteId] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
   const [draggingNoteId, setDraggingNoteId] = useState(null);
   const [dragTabId, setDragTabId] = useState(null);
   const [dragOverTabId, setDragOverTabId] = useState(null);
@@ -439,10 +440,21 @@ export default function NoteApp() {
     e.dataTransfer.setDragImage(ghost, 0, 0);
     setTimeout(() => document.body.removeChild(ghost), 0);
   }, []);
-  const handleDragOver = useCallback((e, id) => { e.preventDefault(); e.stopPropagation(); if (_dragNoteId && _dragNoteId !== id) setDragOverNoteId(id); }, []);
+  const handleDragOver = useCallback((e, id, index) => {
+    e.preventDefault(); e.stopPropagation();
+    if (!_dragNoteId || _dragNoteId === id) return;
+    setDragOverNoteId(id);
+    // Determine if mouse is in top or bottom half to pick insertion point
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    const midX = rect.left + rect.width / 2;
+    const isListMode = rect.width > 500; // rough heuristic
+    const isBefore = isListMode ? e.clientY < midY : e.clientX < midX;
+    setDragOverIndex(isBefore ? index : index + 1);
+  }, []);
   const handleDrop = useCallback((e, targetId) => {
     e.preventDefault(); e.stopPropagation();
-    const sourceId = _dragNoteId; _dragNoteId = null; setDraggingNoteId(null); setDragOverNoteId(null);
+    const sourceId = _dragNoteId; _dragNoteId = null; setDraggingNoteId(null); setDragOverNoteId(null); setDragOverIndex(null);
     if (!sourceId || sourceId === targetId) return;
     setNotes(ns => {
       const arr = [...ns];
@@ -455,7 +467,7 @@ export default function NoteApp() {
     });
     setSortOrder("manual");
   }, []);
-  const handleDragEnd = useCallback(() => { _dragNoteId = null; setDraggingNoteId(null); setDragOverNoteId(null); }, []);
+  const handleDragEnd = useCallback(() => { _dragNoteId = null; setDraggingNoteId(null); setDragOverNoteId(null); setDragOverIndex(null); }, []);
 
   const readFile = (file) => new Promise(res => { const r = new FileReader(); r.onload = e => res({ id: uid(), name: file.name, type: file.type, url: e.target.result, base64: e.target.result.split(",")[1] }); r.readAsDataURL(file); });
   const handleFiles = async (files) => { const atts = await Promise.all(Array.from(files).map(readFile)); setForm(f => ({ ...f, attachments: [...f.attachments, ...atts] })); };
@@ -861,38 +873,56 @@ export default function NoteApp() {
             </div>
           ) : viewMode === "grid" ? (
             <div style={s.grid}>
-              {sorted.map(note => (
-                <NoteCard key={note.id} note={note} s={s} c={c} tabs={tabs} view={view}
-                  isDragging={draggingNoteId === note.id} isDragOver={dragOverNoteId === note.id}
-                  onDragStart={e => handleDragStart(e, note.id)} onDragOver={e => handleDragOver(e, note.id)}
-                  onDrop={e => handleDrop(e, note.id)} onDragEnd={handleDragEnd}
-                  fileIcon={fileIcon} onEdit={() => openEdit(note)} onTrash={() => trashNote(note.id)}
-                  onDelete={() => deletePermanently(note.id)} onToggleComplete={() => toggleComplete(note.id, note.completed)}
-                  onTogglePriority={() => togglePriority(note.id, note.priority)} onShare={() => setShareModal(note)}
-                  onHistory={() => setHistoryModal(note)}
-                  onRestore={() => view === "trash" ? restoreFromTrash(note.id) : restoreFromCompleted(note.id)}
-                  onInlineSave={inlineSaveNote}
-                  catColor={getNoteColor(note)}
-                  selected={selectedNoteId === note.id}
-                  onSelect={() => setSelectedNoteId(note.id)} />
+              {sorted.map((note, index) => (
+                <div key={note.id} style={{ position: "relative" }}>
+                  {dragOverIndex === index && draggingNoteId !== note.id && (
+                    <div style={{ height: 3, borderRadius: 2, background: c.accent, margin: "0 0 8px 0", boxShadow: `0 0 6px ${c.accent}88` }} />
+                  )}
+                  <NoteCard note={note} s={s} c={c} tabs={tabs} view={view}
+                    isDragging={draggingNoteId === note.id} isDragOver={false}
+                    onDragStart={e => handleDragStart(e, note.id)}
+                    onDragOver={e => handleDragOver(e, note.id, index)}
+                    onDrop={e => handleDrop(e, note.id)} onDragEnd={handleDragEnd}
+                    fileIcon={fileIcon} onEdit={() => openEdit(note)} onTrash={() => trashNote(note.id)}
+                    onDelete={() => deletePermanently(note.id)} onToggleComplete={() => toggleComplete(note.id, note.completed)}
+                    onTogglePriority={() => togglePriority(note.id, note.priority)} onShare={() => setShareModal(note)}
+                    onHistory={() => setHistoryModal(note)}
+                    onRestore={() => view === "trash" ? restoreFromTrash(note.id) : restoreFromCompleted(note.id)}
+                    onInlineSave={inlineSaveNote}
+                    catColor={getNoteColor(note)}
+                    selected={selectedNoteId === note.id}
+                    onSelect={() => setSelectedNoteId(note.id)} />
+                  {dragOverIndex === index + 1 && index === sorted.length - 1 && draggingNoteId !== note.id && (
+                    <div style={{ height: 3, borderRadius: 2, background: c.accent, margin: "8px 0 0 0", boxShadow: `0 0 6px ${c.accent}88` }} />
+                  )}
+                </div>
               ))}
             </div>
           ) : (
             <div style={s.listWrap}>
-              {sorted.map(note => (
-                <NoteListRow key={note.id} note={note} s={s} c={c} tabs={tabs} view={view}
-                  isDragging={draggingNoteId === note.id} isDragOver={dragOverNoteId === note.id}
-                  onDragStart={e => handleDragStart(e, note.id)} onDragOver={e => handleDragOver(e, note.id)}
-                  onDrop={e => handleDrop(e, note.id)} onDragEnd={handleDragEnd}
-                  fileIcon={fileIcon} onEdit={() => openEdit(note)} onTrash={() => trashNote(note.id)}
-                  onDelete={() => deletePermanently(note.id)} onToggleComplete={() => toggleComplete(note.id, note.completed)}
-                  onTogglePriority={() => togglePriority(note.id, note.priority)} onShare={() => setShareModal(note)}
-                  onHistory={() => setHistoryModal(note)}
-                  onRestore={() => view === "trash" ? restoreFromTrash(note.id) : restoreFromCompleted(note.id)}
-                  onInlineSave={inlineSaveNote}
-                  catColor={getNoteColor(note)}
-                  selected={selectedNoteId === note.id}
-                  onSelect={() => setSelectedNoteId(note.id)} />
+              {sorted.map((note, index) => (
+                <div key={note.id}>
+                  {dragOverIndex === index && draggingNoteId !== note.id && (
+                    <div style={{ height: 3, borderRadius: 2, background: c.accent, margin: "0 0 6px 0", boxShadow: `0 0 6px ${c.accent}88` }} />
+                  )}
+                  <NoteListRow note={note} s={s} c={c} tabs={tabs} view={view}
+                    isDragging={draggingNoteId === note.id} isDragOver={false}
+                    onDragStart={e => handleDragStart(e, note.id)}
+                    onDragOver={e => handleDragOver(e, note.id, index)}
+                    onDrop={e => handleDrop(e, note.id)} onDragEnd={handleDragEnd}
+                    fileIcon={fileIcon} onEdit={() => openEdit(note)} onTrash={() => trashNote(note.id)}
+                    onDelete={() => deletePermanently(note.id)} onToggleComplete={() => toggleComplete(note.id, note.completed)}
+                    onTogglePriority={() => togglePriority(note.id, note.priority)} onShare={() => setShareModal(note)}
+                    onHistory={() => setHistoryModal(note)}
+                    onRestore={() => view === "trash" ? restoreFromTrash(note.id) : restoreFromCompleted(note.id)}
+                    onInlineSave={inlineSaveNote}
+                    catColor={getNoteColor(note)}
+                    selected={selectedNoteId === note.id}
+                    onSelect={() => setSelectedNoteId(note.id)} />
+                  {dragOverIndex === index + 1 && index === sorted.length - 1 && draggingNoteId !== note.id && (
+                    <div style={{ height: 3, borderRadius: 2, background: c.accent, margin: "6px 0 0 0", boxShadow: `0 0 6px ${c.accent}88` }} />
+                  )}
+                </div>
               ))}
             </div>
           )}

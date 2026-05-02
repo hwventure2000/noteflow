@@ -480,6 +480,7 @@ export default function NoteApp() {
     setTimeout(() => document.body.removeChild(ghost), 0);
   }, []);
   const handleDragOver = useCallback((e, id, index) => {
+    if (e.dataTransfer.types.includes("tag-drag")) return;
     e.preventDefault(); e.stopPropagation();
     if (!_dragNoteId || _dragNoteId === id) return;
     setDragOverNoteId(id);
@@ -490,6 +491,8 @@ export default function NoteApp() {
     setDragOverIndex(isBefore ? index : index + 1);
   }, []);
   const handleDrop = useCallback((e, targetId) => {
+    // Ignore tag reorder drags — let the tag's own onDrop handle it
+    if (e.dataTransfer.types.includes("tag-drag")) return;
     e.preventDefault(); e.stopPropagation();
     const sourceId = _dragNoteId; _dragNoteId = null; setDraggingNoteId(null); setDragOverNoteId(null); setDragOverIndex(null);
     if (!sourceId || sourceId === targetId) return;

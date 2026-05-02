@@ -442,27 +442,20 @@ export default function NoteApp() {
   const handleDragOver = useCallback((e, id) => { e.preventDefault(); e.stopPropagation(); if (_dragNoteId && _dragNoteId !== id) setDragOverNoteId(id); }, []);
   const handleDrop = useCallback((e, targetId) => {
     e.preventDefault(); e.stopPropagation();
-    // Read sourceId from dataTransfer as fallback — _dragNoteId may be cleared by dragEnd in some browsers
-    const sourceId = _dragNoteId || e.dataTransfer.getData("text/plain");
-    _dragNoteId = null;
-    setDraggingNoteId(null);
-    setDragOverNoteId(null);
+    const sourceId = _dragNoteId; _dragNoteId = null; setDraggingNoteId(null); setDragOverNoteId(null);
     if (!sourceId || sourceId === targetId) return;
-    setSortOrder("manual");
     setNotes(ns => {
-      const arr = [...ns].sort((a, b) => a.order - b.order);
-      const fi = arr.findIndex(n => n.id === sourceId);
-      const ti = arr.findIndex(n => n.id === targetId);
+      const arr = [...ns];
+      const fi = arr.findIndex(n => n.id === sourceId), ti = arr.findIndex(n => n.id === targetId);
       if (fi === -1 || ti === -1) return ns;
-      const [moved] = arr.splice(fi, 1);
-      arr.splice(ti, 0, moved);
+      const [moved] = arr.splice(fi, 1); arr.splice(ti, 0, moved);
       const updated = arr.map((n, i) => ({ ...n, order: i }));
       updated.forEach(n => sb.from("notes").update({ position: n.order }).eq("id", n.id));
       return updated;
     });
+    setSortOrder("manual");
   }, []);
-  // dragEnd fires after drop — just clean up visuals, don't clear _dragNoteId here
-  const handleDragEnd = useCallback(() => { setDraggingNoteId(null); setDragOverNoteId(null); }, []);
+  const handleDragEnd = useCallback(() => { _dragNoteId = null; setDraggingNoteId(null); setDragOverNoteId(null); }, []);
 
   const readFile = (file) => new Promise(res => { const r = new FileReader(); r.onload = e => res({ id: uid(), name: file.name, type: file.type, url: e.target.result, base64: e.target.result.split(",")[1] }); r.readAsDataURL(file); });
   const handleFiles = async (files) => { const atts = await Promise.all(Array.from(files).map(readFile)); setForm(f => ({ ...f, attachments: [...f.attachments, ...atts] })); };
@@ -853,7 +846,7 @@ export default function NoteApp() {
         </div>
 
         <div style={s.content}
-          onDragOver={e => { e.preventDefault(); }}
+          onDragOver={e => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }}
           onDrop={e => {
             e.preventDefault();
             const file = Array.from(e.dataTransfer.files).find(f => f.name.endsWith(".ics"));
@@ -1312,7 +1305,6 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
       onDragStart={editingField ? undefined : onDragStart}
       onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
       onDoubleClick={handleCardDoubleClick}
-      onClick={e => { if (!isDragging) onSelect(); }}
       style={{ ...s.card(note.priority && view === "all", isDragging, isDragOver, catColor, selected), background: isDragOver ? c.accentSoft : catColor ? catColor + "18" : hover ? c.cardHover : c.card }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
@@ -1413,7 +1405,6 @@ function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragSta
 
   return (
     <div draggable={!editingTitle} onDragStart={editingTitle ? undefined : onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
-      onClick={e => { if (!isDragging) onSelect(); }}
       onDoubleClick={view === "all" && !editingTitle ? onEdit : undefined}
       style={{ ...s.listCard(note.priority && view === "all", isDragging, isDragOver, catColor, selected) }}>
       {view !== "trash" && (

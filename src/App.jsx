@@ -466,6 +466,7 @@ export default function NoteApp() {
   const togglePriority = (id, cur) => updateNote(id, { priority: !cur }, cur ? "Removed priority" : "Set as priority");
   const restoreFromCompleted = (id) => updateNote(id, { completed: false }, "Restored from completed");
   const inlineSaveNote = (id, patch) => updateNote(id, patch, "Inline edit");
+  const reorderTabs = (noteId, newTabOrder) => updateNote(noteId, { tabs: newTabOrder }, null);
 
   const handleDragStart = useCallback((e, id) => {
     _dragNoteId = id;
@@ -953,7 +954,8 @@ export default function NoteApp() {
                   multiSelected={multiSelectedIds.has(note.id)}
                   onSelect={() => setSelectedNoteId(note.id)}
                   onMultiSelect={e => toggleMultiSelect(note.id, e)}
-                  onContextMenu={e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, note }); }} />
+                  onContextMenu={e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, note }); }}
+                  onReorderTabs={newOrder => reorderTabs(note.id, newOrder)} />
               ))}
             </div>
           ) : (
@@ -1373,9 +1375,63 @@ function ScanReviewModal({ reviewNotes, setReviewNotes, tabs, s, c, onAcceptAll,
   );
 }
 
+// ── Draggable Tags ────────────────────────────────────────────────────────────
+function DraggableTags({ tags, noteId, s, c, view, onReorderTabs }) {
+  const [dragIdx, setDragIdx] = useState(null);
+  const [overIdx, setOverIdx] = useState(null);
+
+  if (view !== "all") {
+    return <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>{tags.map(t => <span key={t.id} style={s.tag}>{t.label}</span>)}</div>;
+  }
+
+  const onDragStart = (e, i) => {
+    setDragIdx(i);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", String(i));
+    e.stopPropagation();
+  };
+  const onDragOver = (e, i) => { e.preventDefault(); e.stopPropagation(); setOverIdx(i); };
+  const onDrop = (e, i) => {
+    e.preventDefault(); e.stopPropagation();
+    if (dragIdx === null || dragIdx === i) { setDragIdx(null); setOverIdx(null); return; }
+    const arr = [...tags];
+    const [moved] = arr.splice(dragIdx, 1);
+    arr.splice(i, 0, moved);
+    onReorderTabs(arr.map(t => t.id));
+    setDragIdx(null); setOverIdx(null);
+  };
+  const onDragEnd = (e) => { e.stopPropagation(); setDragIdx(null); setOverIdx(null); };
+
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+      {tags.map((t, i) => (
+        <span
+          key={t.id}
+          draggable
+          onDragStart={e => onDragStart(e, i)}
+          onDragOver={e => onDragOver(e, i)}
+          onDrop={e => onDrop(e, i)}
+          onDragEnd={onDragEnd}
+          title="Drag to reorder priority"
+          style={{
+            ...s.tag,
+            opacity: dragIdx === i ? 0.3 : 1,
+            cursor: "grab",
+            outline: overIdx === i && dragIdx !== i ? `2px solid ${c.accent}` : "none",
+            transition: "opacity 0.15s, outline 0.1s",
+          }}
+        >
+          {i === 0 && <span style={{ fontSize: 9, opacity: 0.6, marginRight: 2 }}>★</span>}
+          {t.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // ── Grid Card ─────────────────────────────────────────────────────────────────
 // CHANGE: single-click title = inline edit; double-click anywhere on card = open modal
-function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, fileIcon, onEdit, onTrash, onDelete, onToggleComplete, onTogglePriority, onShare, onHistory, onRestore, onInlineSave, catColor, selected, onSelect, insertBefore, insertAfter, accentColor, multiSelected, onMultiSelect, onContextMenu }) {
+function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, fileIcon, onEdit, onTrash, onDelete, onToggleComplete, onTogglePriority, onShare, onHistory, onRestore, onInlineSave, catColor, selected, onSelect, insertBefore, insertAfter, accentColor, multiSelected, onMultiSelect, onContextMenu, onReorderTabs }) {
   const [hover, setHover] = useState(false);
   const [editingField, setEditingField] = useState(null);
   const [draft, setDraft] = useState({ title: note.title, body: note.body });
@@ -1472,7 +1528,9 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
       )}
 
       {note.attachments?.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>{note.attachments.map(a => <a key={a.id} href={a.url} target="_blank" rel="noreferrer" style={{ ...s.tag, textDecoration: "none" }}>{fileIcon(a.type)} {a.name?.length > 15 ? a.name.slice(0, 15) + "…" : a.name}</a>)}</div>}
-      {noteTabs.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>{noteTabs.map(t => <span key={t.id} style={s.tag}>{t.label}</span>)}</div>}
+      {noteTabs.length > 0 && (
+        <DraggableTags tags={noteTabs} noteId={note.id} s={s} c={c} view={view} onReorderTabs={onReorderTabs} />
+      )}
       {(!note.tabs || note.tabs.length === 0) && view === "all" && <span style={{ ...s.tag, background: c.border, color: c.muted }}>Uncategorized</span>}
       {note.reminder && <div style={{ fontSize: 12, color: c.muted }}>⏰ {fmt(new Date(note.reminder).getTime())}</div>}
       {(note.sharedWith?.length > 0 || note.shareLink) && <div style={{ fontSize: 12, color: c.accent }}>🔗 Shared{note.sharedWith?.length > 0 ? ` with ${note.sharedWith.length}` : " via link"}</div>}

@@ -1326,16 +1326,15 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
   };
 
   return (
-    <div style={{ position: "relative" }}>
+    <div
+      draggable={!editingField}
+      onDragStart={editingField ? undefined : onDragStart}
+      onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
+      onDoubleClick={handleCardDoubleClick}
+      style={{ position: "relative", ...s.card(note.priority && view === "all", isDragging, isDragOver, catColor, selected, false, false), background: isDragOver ? c.accentSoft : catColor ? catColor + "18" : hover ? c.cardHover : c.card }}
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       {insertBefore && <div style={{ position: "absolute", left: -8, top: "10%", height: "80%", width: 3, borderRadius: 2, background: accentColor || c.accent, boxShadow: `0 0 8px ${accentColor || c.accent}`, zIndex: 10, pointerEvents: "none" }} />}
       {insertAfter && <div style={{ position: "absolute", right: -8, top: "10%", height: "80%", width: 3, borderRadius: 2, background: accentColor || c.accent, boxShadow: `0 0 8px ${accentColor || c.accent}`, zIndex: 10, pointerEvents: "none" }} />}
-      <div
-        draggable={!editingField}
-        onDragStart={editingField ? undefined : onDragStart}
-        onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
-        onDoubleClick={handleCardDoubleClick}
-        style={{ ...s.card(note.priority && view === "all", isDragging, isDragOver, catColor, selected, false, false), background: isDragOver ? c.accentSoft : catColor ? catColor + "18" : hover ? c.cardHover : c.card }}
-        onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
         {view !== "trash" && (
           <div onClick={e => { e.stopPropagation(); onToggleComplete(); }} style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${note.completed ? c.success : c.border}`, background: note.completed ? c.success : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, marginTop: 2, transition: "all 0.13s" }}>
@@ -1396,7 +1395,6 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
         </>)}
         <div style={{ fontSize: 11, color: c.muted, marginLeft: view !== "all" ? "auto" : 0 }}>{fmt(note.createdAt)}</div>
       </div>
-    </div>
     </div>
   );
 }

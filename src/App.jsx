@@ -204,7 +204,7 @@ export default function NoteApp() {
   const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
   const [view, setView] = useState("all");
-  const [sortOrder, setSortOrder] = useState("manual");
+  const [sortOrder, setSortOrder] = useState("newToOld");
   const [viewMode, setViewMode] = useState("grid");
   const [dragOverNoteId, setDragOverNoteId] = useState(null);
   const [draggingNoteId, setDraggingNoteId] = useState(null);
@@ -715,9 +715,6 @@ export default function NoteApp() {
             </div>
             <div style={{ fontSize: 11, color: c.muted, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.user.email}</div>
           </div>
-          <button onClick={() => setSidebarCollapsed(true)} title="Collapse sidebar" style={{ background: "none", border: "none", cursor: "pointer", color: c.muted, padding: 4, borderRadius: 6, display: "flex", alignItems: "center", flexShrink: 0 }}>
-            <Ico d="M11 19l-7-7 7-7M18 19l-7-7 7-7" size={16} />
-          </button>
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", paddingTop: 6 }}>
@@ -819,8 +816,9 @@ export default function NoteApp() {
       {/* ── main ── */}
       <div style={s.main}>
         <div style={s.topbar}>
-          <button style={{ ...s.iconBtn(c.muted), padding: "6px 8px" }} title="Toggle sidebar" onClick={() => setSidebarCollapsed(v => !v)}>
-            <Ico d="M3 12h18M3 6h18M3 18h18" size={17} />
+          {/* Chevron: points left (collapse) when open, points right (expand) when closed */}
+          <button style={{ ...s.iconBtn(c.muted), padding: "6px 8px" }} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setSidebarCollapsed(v => !v)}>
+            <Ico d={sidebarCollapsed ? "M9 18l6-6-6-6" : "M15 18l-6-6 6-6"} size={17} />
           </button>
           <div style={s.searchWrap}>
             <Ico d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" />
@@ -829,7 +827,6 @@ export default function NoteApp() {
           <select style={{ ...s.inp, width: "auto", fontSize: 12, padding: "6px 10px" }} value={sortOrder} onChange={e => setSortOrder(e.target.value)}>
             <option value="newToOld">Newest first</option>
             <option value="oldToNew">Oldest first</option>
-            <option value="manual">Manual order</option>
           </select>
           <button style={{ ...s.btn("ghost"), padding: "6px 10px" }} onClick={() => setViewMode(v => v === "grid" ? "list" : "grid")}>
             <Ico d={viewMode === "grid" ? "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" : "M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"} />

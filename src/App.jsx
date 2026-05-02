@@ -206,6 +206,8 @@ export default function NoteApp() {
   const [view, setView] = useState("all");
   const [sortOrder, setSortOrder] = useState("newToOld");
   const [selectedNoteId, setSelectedNoteId] = useState(null);
+  const [multiSelectedIds, setMultiSelectedIds] = useState(new Set());
+  const [contextMenu, setContextMenu] = useState(null); // {x, y, note}
   const [viewMode, setViewMode] = useState("grid");
   const [dragOverNoteId, setDragOverNoteId] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
@@ -264,6 +266,7 @@ export default function NoteApp() {
         e.preventDefault();
         if (session && view === "all") openNew();
       }
+      if (e.key === "Escape") { setContextMenu(null); setMultiSelectedIds(new Set()); }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -424,6 +427,26 @@ export default function NoteApp() {
   const trashNote = (id) => updateNote(id, { trashed: true }, "Moved to trash");
   const restoreFromTrash = (id) => updateNote(id, { trashed: false }, "Restored from trash");
   const deletePermanently = async (id) => { await sb.from("notes").delete().eq("id", id); setNotes(ns => ns.filter(n => n.id !== id)); };
+  const emptyTrash = async () => {
+    const trashed = notes.filter(n => n.trashed);
+    for (const n of trashed) await sb.from("notes").delete().eq("id", n.id);
+    setNotes(ns => ns.filter(n => !n.trashed));
+  };
+  const deleteMultiple = async (ids) => {
+    for (const id of ids) await sb.from("notes").delete().eq("id", id);
+    setNotes(ns => ns.filter(n => !ids.has(n.id)));
+    setMultiSelectedIds(new Set());
+  };
+  const toggleMultiSelect = (id, e) => {
+    if (e.altKey) {
+      e.stopPropagation();
+      setMultiSelectedIds(prev => {
+        const next = new Set(prev);
+        next.has(id) ? next.delete(id) : next.add(id);
+        return next;
+      });
+    }
+  };
   const toggleComplete = (id, cur) => updateNote(id, { completed: !cur }, cur ? "Restored" : "Marked complete");
   const togglePriority = (id, cur) => updateNote(id, { priority: !cur }, cur ? "Removed priority" : "Set as priority");
   const restoreFromCompleted = (id) => updateNote(id, { completed: false }, "Restored from completed");
@@ -852,10 +875,32 @@ export default function NoteApp() {
             <Ico d={viewMode === "grid" ? "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" : "M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"} />
           </button>
           {view === "all" && <button style={s.btn("primary")} onClick={openNew}><Ico d="M12 5v14M5 12h14" /> New Note</button>}
+          {view === "trash" && sorted.length > 0 && (
+            <button style={s.btn("danger")} onClick={() => { if (window.confirm(`Permanently delete all ${sorted.length} notes in trash?`)) emptyTrash(); }}>
+              <Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /> Empty Trash
+            </button>
+          )}
           {dbLoading && <span style={{ fontSize: 12, color: c.muted }}>Syncing…</span>}
         </div>
 
+        {/* ── multi-select action bar ── */}
+        {multiSelectedIds.size > 0 && (
+          <div style={{ padding: "10px 20px", background: c.accent, display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>{multiSelectedIds.size} note{multiSelectedIds.size !== 1 ? "s" : ""} selected</span>
+            <button style={{ ...s.btn("danger"), fontSize: 12, padding: "5px 12px" }} onClick={() => { if (window.confirm(`Permanently delete ${multiSelectedIds.size} notes?`)) deleteMultiple(multiSelectedIds); }}>
+              <Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" size={13} /> Delete Selected
+            </button>
+            {view !== "trash" && (
+              <button style={{ ...s.btn("ghost"), fontSize: 12, padding: "5px 12px", background: "rgba(255,255,255,0.2)", color: "#fff" }} onClick={() => { multiSelectedIds.forEach(id => trashNote(id)); setMultiSelectedIds(new Set()); }}>
+                <Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" size={13} /> Move to Trash
+              </button>
+            )}
+            <button style={{ ...s.iconBtn("#fff"), marginLeft: "auto" }} onClick={() => setMultiSelectedIds(new Set())}>✕ Clear</button>
+          </div>
+        )}
+
         <div style={s.content}
+          onClick={() => { setContextMenu(null); }}
           onDragOver={e => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }}
           onDrop={e => {
             e.preventDefault();
@@ -888,7 +933,10 @@ export default function NoteApp() {
                   onInlineSave={inlineSaveNote}
                   catColor={getNoteColor(note)}
                   selected={selectedNoteId === note.id}
-                  onSelect={() => setSelectedNoteId(note.id)} />
+                  multiSelected={multiSelectedIds.has(note.id)}
+                  onSelect={() => setSelectedNoteId(note.id)}
+                  onMultiSelect={e => toggleMultiSelect(note.id, e)}
+                  onContextMenu={e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, note }); }} />
               ))}
             </div>
           ) : (
@@ -917,7 +965,10 @@ export default function NoteApp() {
                     onInlineSave={inlineSaveNote}
                     catColor={getNoteColor(note)}
                     selected={selectedNoteId === note.id}
-                    onSelect={() => setSelectedNoteId(note.id)} />
+                    multiSelected={multiSelectedIds.has(note.id)}
+                    onSelect={() => setSelectedNoteId(note.id)}
+                    onMultiSelect={e => toggleMultiSelect(note.id, e)}
+                    onContextMenu={e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, note }); }} />
                 </div>
               ))}
             </div>
@@ -1106,6 +1157,30 @@ export default function NoteApp() {
             onOpen={() => { dismissAlert(alert.alertId); const note = notes.find(n => n.id === alert.noteId); if (note) openEdit(note); }} />
         ))}
       </div>
+
+      {/* ── context menu ── */}
+      {contextMenu && (
+        <div onClick={e => e.stopPropagation()} style={{ position: "fixed", top: contextMenu.y, left: contextMenu.x, background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: "4px 0", zIndex: 9999, minWidth: 190, boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
+          {[
+            { label: "✏️  Edit", action: () => { openEdit(contextMenu.note); setContextMenu(null); }, hide: view === "trash" },
+            { label: "⭐  Toggle Priority", action: () => { togglePriority(contextMenu.note.id, contextMenu.note.priority); setContextMenu(null); }, hide: view === "trash" },
+            { label: "✅  Mark Complete", action: () => { toggleComplete(contextMenu.note.id, contextMenu.note.completed); setContextMenu(null); }, hide: view === "trash" },
+            { label: "🔗  Share", action: () => { setShareModal(contextMenu.note); setContextMenu(null); }, hide: view === "trash" },
+            { divider: true, hide: view === "trash" },
+            { label: "♻️  Restore", action: () => { restoreFromTrash(contextMenu.note.id); setContextMenu(null); }, hide: view !== "trash" },
+            { label: "🗑  Move to Trash", action: () => { trashNote(contextMenu.note.id); setContextMenu(null); }, hide: view === "trash", danger: true },
+            { label: "🗑  Delete Forever", action: () => { if (window.confirm("Delete permanently? This cannot be undone.")) { deletePermanently(contextMenu.note.id); setContextMenu(null); } }, danger: true },
+          ].filter(item => !item.hide).map((item, i) => item.divider
+            ? <div key={i} style={{ height: 1, background: c.border, margin: "4px 0" }} />
+            : <div key={i} onClick={item.action}
+                style={{ padding: "9px 16px", fontSize: 13.5, cursor: "pointer", color: item.danger ? c.danger : c.text, transition: "background 0.1s" }}
+                onMouseEnter={e => e.currentTarget.style.background = c.accentSoft}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                {item.label}
+              </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1282,7 +1357,7 @@ function ScanReviewModal({ reviewNotes, setReviewNotes, tabs, s, c, onAcceptAll,
 
 // ── Grid Card ─────────────────────────────────────────────────────────────────
 // CHANGE: single-click title = inline edit; double-click anywhere on card = open modal
-function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, fileIcon, onEdit, onTrash, onDelete, onToggleComplete, onTogglePriority, onShare, onHistory, onRestore, onInlineSave, catColor, selected, onSelect, insertBefore, insertAfter, accentColor }) {
+function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, fileIcon, onEdit, onTrash, onDelete, onToggleComplete, onTogglePriority, onShare, onHistory, onRestore, onInlineSave, catColor, selected, onSelect, insertBefore, insertAfter, accentColor, multiSelected, onMultiSelect, onContextMenu }) {
   const [hover, setHover] = useState(false);
   const [editingField, setEditingField] = useState(null);
   const [draft, setDraft] = useState({ title: note.title, body: note.body });
@@ -1331,7 +1406,9 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
       onDragStart={editingField ? undefined : onDragStart}
       onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
       onDoubleClick={handleCardDoubleClick}
-      style={{ position: "relative", ...s.card(note.priority && view === "all", isDragging, isDragOver, catColor, selected, false, false), background: isDragOver ? c.accentSoft : catColor ? catColor + "18" : hover ? c.cardHover : c.card }}
+      onContextMenu={onContextMenu}
+      onClick={onMultiSelect}
+      style={{ position: "relative", ...s.card(note.priority && view === "all", isDragging, isDragOver, catColor, selected, false, false), background: isDragOver ? c.accentSoft : multiSelected ? c.accent + "33" : catColor ? catColor + "18" : hover ? c.cardHover : c.card, outline: multiSelected ? `2px solid ${c.accent}` : "none" }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       {insertBefore && <div style={{ position: "absolute", left: -8, top: "10%", height: "80%", width: 3, borderRadius: 2, background: accentColor || c.accent, boxShadow: `0 0 8px ${accentColor || c.accent}`, zIndex: 10, pointerEvents: "none" }} />}
       {insertAfter && <div style={{ position: "absolute", right: -8, top: "10%", height: "80%", width: 3, borderRadius: 2, background: accentColor || c.accent, boxShadow: `0 0 8px ${accentColor || c.accent}`, zIndex: 10, pointerEvents: "none" }} />}
@@ -1401,7 +1478,7 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
 
 // ── List Row ──────────────────────────────────────────────────────────────────
 // CHANGE: single-click title = inline edit; double-click row = open modal
-function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, fileIcon, onEdit, onTrash, onDelete, onToggleComplete, onTogglePriority, onShare, onHistory, onRestore, onInlineSave, catColor, selected, onSelect, insertBefore, insertAfter }) {
+function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, fileIcon, onEdit, onTrash, onDelete, onToggleComplete, onTogglePriority, onShare, onHistory, onRestore, onInlineSave, catColor, selected, onSelect, insertBefore, insertAfter, multiSelected, onMultiSelect, onContextMenu }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(note.title);
   const clickTimer = useRef(null);
@@ -1434,7 +1511,9 @@ function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragSta
   return (
     <div draggable={!editingTitle} onDragStart={editingTitle ? undefined : onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
       onDoubleClick={view === "all" && !editingTitle ? onEdit : undefined}
-      style={{ ...s.listCard(note.priority && view === "all", isDragging, isDragOver, catColor, selected, insertBefore, insertAfter) }}>
+      onContextMenu={onContextMenu}
+      onClick={onMultiSelect}
+      style={{ ...s.listCard(note.priority && view === "all", isDragging, isDragOver, catColor, selected, insertBefore, insertAfter), background: multiSelected ? c.accent + "33" : undefined, outline: multiSelected ? `2px solid ${c.accent}` : "none" }}>
       {view !== "trash" && (
         <div onClick={e => { e.stopPropagation(); onToggleComplete(); }} style={{ width: 17, height: 17, borderRadius: 5, border: `2px solid ${note.completed ? c.success : c.border}`, background: note.completed ? c.success : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, marginTop: 2 }}>
           {note.completed && <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>}

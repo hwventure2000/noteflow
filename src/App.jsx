@@ -103,7 +103,26 @@ function AuthScreen({ c, s }) {
   return (
     <div style={{ display: "flex", height: "100vh", width: "100vw", position: "fixed", top: 0, left: 0, background: c.bg, alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans','Segoe UI',sans-serif" }}>
       <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 20, padding: 36, width: "100%", maxWidth: 380 }}>
-        <div style={{ fontSize: 24, fontWeight: 800, color: c.accent, letterSpacing: "-0.5px", marginBottom: 4 }}>📋 NoteFlow</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+          <svg width="38" height="38" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+            <rect width="100" height="100" rx="22" fill="url(#bg2)"/>
+            <defs>
+              <linearGradient id="bg2" x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="#9B8BF8"/>
+                <stop offset="100%" stopColor="#5B3FD4"/>
+              </linearGradient>
+            </defs>
+            <path d="M62 82 Q78 80 80 65 L80 30 Q80 24 74 24 L44 24 Q38 24 38 30 L38 76 Q50 88 62 82Z" fill="#4A2FB0" opacity="0.5"/>
+            <path d="M58 78 Q74 76 76 61 L76 26 Q76 20 70 20 L40 20 Q34 20 34 26 L34 72 Q46 84 58 78Z" fill="white"/>
+            <path d="M34 72 Q34 84 46 84 Q46 84 34 72Z" fill="#C4B8F8" opacity="0.6"/>
+            <rect x="42" y="33" width="24" height="4" rx="2" fill="#A99EF0"/>
+            <rect x="42" y="43" width="22" height="4" rx="2" fill="#A99EF0"/>
+            <rect x="42" y="53" width="16" height="4" rx="2" fill="#A99EF0"/>
+          </svg>
+          <div style={{ fontSize: 26, fontWeight: 300, letterSpacing: "0.01em", fontFamily: "'Inter','Helvetica Neue','Segoe UI',sans-serif" }}>
+            <span style={{ color: c.text, fontWeight: 600 }}>Note</span><span style={{ color: c.accent, fontWeight: 300 }}>Flow</span>
+          </div>
+        </div>
         <div style={{ fontSize: 13, color: c.muted, marginBottom: 28 }}>
           {mode === "login" ? "Sign in to your workspace" : mode === "signup" ? "Create your account" : "Reset your password"}
         </div>

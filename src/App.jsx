@@ -907,7 +907,7 @@ export default function NoteApp() {
 
         {/* ── multi-select action bar ── */}
         {multiSelectedIds.size > 0 && (
-          <div style={{ padding: "10px 20px", background: c.accent, display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ padding: "10px 20px", background: c.accent, display: "flex", alignItems: "center", gap: 12, borderRadius: 12, margin: "8px 16px 0" }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>{multiSelectedIds.size} note{multiSelectedIds.size !== 1 ? "s" : ""} selected</span>
             <button style={{ ...s.btn("danger"), fontSize: 12, padding: "5px 12px" }} onClick={() => { if (window.confirm(`Permanently delete ${multiSelectedIds.size} notes?`)) deleteMultiple(multiSelectedIds); }}>
               <Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" size={13} /> Delete Selected
@@ -923,6 +923,7 @@ export default function NoteApp() {
 
         <div style={s.content}
           onClick={() => { setContextMenu(null); }}
+          onContextMenu={e => { if (e.target === e.currentTarget && view === "all") { e.preventDefault(); openNew(); } }}
           onDragOver={e => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }}
           onDrop={e => {
             e.preventDefault();

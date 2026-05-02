@@ -259,6 +259,18 @@ export default function NoteApp() {
 
   useEffect(() => { if (session) { loadCategories(); loadNotes(); } }, [session]);
 
+  // Auto-expire trash after 30 days
+  useEffect(() => {
+    if (!notes.length) return;
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const expired = notes.filter(n => n.trashed && n.trashed_at && new Date(n.trashed_at).getTime() < thirtyDaysAgo);
+    if (expired.length === 0) return;
+    expired.forEach(async n => {
+      await sb.from("notes").delete().eq("id", n.id);
+    });
+    setNotes(ns => ns.filter(n => !expired.find(e => e.id === n.id)));
+  }, [notes.length]);
+
   // Cmd+N / Ctrl+N to open new note
   useEffect(() => {
     const handler = (e) => {
@@ -289,6 +301,8 @@ export default function NoteApp() {
       setNotes(notesData.map(n => ({
         ...n,
         tabs: n.tabs || [],
+        pinned: n.pinned || false,
+        trashed_at: n.trashed_at || null,
         attachments: (attachData || []).filter(a => a.note_id === n.id),
         history: (histData || []).filter(h => h.note_id === n.id).map(h => ({ user: "You", action: h.action, at: new Date(h.created_at).getTime() })),
         sharedWith: (shareData || []).filter(s => s.note_id === n.id).map(s => ({ email: s.email, permission: s.permission, at: new Date(s.created_at).getTime() })),
@@ -424,8 +438,9 @@ export default function NoteApp() {
     setNotes(ns => ns.map(n => n.id === id ? { ...n, ...patch, history: histAction ? [...n.history, { user: "You", action: histAction, at: nowTs() }] : n.history } : n));
   };
 
-  const trashNote = (id) => updateNote(id, { trashed: true }, "Moved to trash");
-  const restoreFromTrash = (id) => updateNote(id, { trashed: false }, "Restored from trash");
+  const trashNote = (id) => updateNote(id, { trashed: true, trashed_at: new Date().toISOString() }, "Moved to trash");
+  const restoreFromTrash = (id) => updateNote(id, { trashed: false, trashed_at: null }, "Restored from trash");
+  const togglePin = (id, cur) => updateNote(id, { pinned: !cur }, cur ? "Unpinned" : "Pinned to top");
   const deletePermanently = async (id) => { await sb.from("notes").delete().eq("id", id); setNotes(ns => ns.filter(n => n.id !== id)); };
   const emptyTrash = async () => {
     const trashed = notes.filter(n => n.trashed);
@@ -682,6 +697,8 @@ export default function NoteApp() {
     return true;
   });
   const sorted = [...visibleNotes].sort((a, b) => {
+    // Pinned always first
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
     if (sortOrder === "manual") return a.order - b.order;
     if (view === "all" && a.priority !== b.priority) return a.priority ? -1 : 1;
     if (sortOrder === "newToOld") return b.createdAt - a.createdAt;
@@ -1162,6 +1179,7 @@ export default function NoteApp() {
       {contextMenu && (
         <div onClick={e => e.stopPropagation()} style={{ position: "fixed", top: contextMenu.y, left: contextMenu.x, background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: "4px 0", zIndex: 9999, minWidth: 190, boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
           {[
+            { label: contextMenu.note.pinned ? "📌 Unpin" : "📌 Pin to Top", action: () => { togglePin(contextMenu.note.id, contextMenu.note.pinned); setContextMenu(null); }, hide: view === "trash" },
             { label: "✏️  Edit", action: () => { openEdit(contextMenu.note); setContextMenu(null); }, hide: view === "trash" },
             { label: "⭐  Toggle Priority", action: () => { togglePriority(contextMenu.note.id, contextMenu.note.priority); setContextMenu(null); }, hide: view === "trash" },
             { label: "✅  Mark Complete", action: () => { toggleComplete(contextMenu.note.id, contextMenu.note.completed); setContextMenu(null); }, hide: view === "trash" },
@@ -1435,6 +1453,7 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
           )}
         </div>
         <Star filled={note.priority} size={15} onClick={e => { e.stopPropagation(); onTogglePriority(); }} />
+        {note.pinned && <span title="Pinned to top" style={{ fontSize: 13, flexShrink: 0 }}>📌</span>}
       </div>
 
       {editingField === "body" ? (
@@ -1544,6 +1563,7 @@ function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragSta
       </div>
       <div style={{ display: "flex", gap: 2, alignItems: "center", flexShrink: 0 }}>
         <Star filled={note.priority} size={13} onClick={e => { e.stopPropagation(); onTogglePriority(); }} />
+        {note.pinned && <span title="Pinned" style={{ fontSize: 12, flexShrink: 0 }}>📌</span>}
         <span style={{ fontSize: 11, color: c.muted, marginRight: 4, marginLeft: 4 }}>{fmt(note.createdAt)}</span>
         {view === "trash" ? (<>
           <button style={s.iconBtn(c.success)} onClick={e => { e.stopPropagation(); onRestore(); }}><Ico d="M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" /></button>

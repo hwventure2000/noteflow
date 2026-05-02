@@ -1380,32 +1380,26 @@ function ScanReviewModal({ reviewNotes, setReviewNotes, tabs, s, c, onAcceptAll,
 
 // ── Draggable Tags ────────────────────────────────────────────────────────────
 function DraggableTags({ tags, noteId, s, c, view, onReorderTabs }) {
+  const [draggingIdx, setDraggingIdx] = useState(null);
   const [overIdx, setOverIdx] = useState(null);
-  const dragIdxRef = useRef(null);
+  // ref mirrors draggingIdx so drop handler always has the current value
+  const draggingIdxRef = useRef(null);
 
   if (view !== "all") {
     return <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>{tags.map(t => <span key={t.id} style={s.tag}>{t.label}</span>)}</div>;
   }
 
   const onDragStart = (e, i) => {
-    dragIdxRef.current = i;
+    draggingIdxRef.current = i;
+    setDraggingIdx(i);
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("tag-drag", String(i));
-    // invisible ghost so card ghost doesn't show
-    const ghost = document.createElement("span");
-    ghost.textContent = tags[i].label;
-    ghost.style.cssText = `position:fixed;top:-999px;padding:4px 10px;background:#7c6af7;color:#fff;border-radius:6px;font-size:13px;font-family:sans-serif`;
-    document.body.appendChild(ghost);
-    e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, 14);
-    setTimeout(() => document.body.removeChild(ghost), 0);
     e.stopPropagation();
   };
 
   const onDragOver = (e, i) => {
     e.preventDefault();
     e.stopPropagation();
-    if (dragIdxRef.current === null) return;
-    // determine before or after based on cursor x position
     const rect = e.currentTarget.getBoundingClientRect();
     const isBefore = e.clientX < rect.left + rect.width / 2;
     setOverIdx(isBefore ? i : i + 1);
@@ -1414,22 +1408,23 @@ function DraggableTags({ tags, noteId, s, c, view, onReorderTabs }) {
   const onDrop = (e, i) => {
     e.preventDefault();
     e.stopPropagation();
-    const srcIdx = dragIdxRef.current;
-    const insertAt = overIdx;
-    dragIdxRef.current = null;
+    const srcIdx = draggingIdxRef.current;
+    const insertAt = overIdx ?? i;
+    draggingIdxRef.current = null;
+    setDraggingIdx(null);
     setOverIdx(null);
-    if (srcIdx === null || insertAt === null) return;
+    if (srcIdx === null || srcIdx === insertAt || srcIdx === insertAt - 1) return;
     const arr = [...tags];
     const [moved] = arr.splice(srcIdx, 1);
-    // adjust insertion index after splice
-    const adjustedIdx = insertAt > srcIdx ? insertAt - 1 : insertAt;
-    arr.splice(adjustedIdx, 0, moved);
+    const adjusted = insertAt > srcIdx ? insertAt - 1 : insertAt;
+    arr.splice(adjusted, 0, moved);
     onReorderTabs(arr.map(t => t.id));
   };
 
   const onDragEnd = (e) => {
     e.stopPropagation();
-    dragIdxRef.current = null;
+    draggingIdxRef.current = null;
+    setDraggingIdx(null);
     setOverIdx(null);
   };
 
@@ -1437,9 +1432,8 @@ function DraggableTags({ tags, noteId, s, c, view, onReorderTabs }) {
     <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
       {tags.map((t, i) => (
         <div key={t.id} style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
-          {/* insertion line BEFORE this tag */}
-          {overIdx === i && dragIdxRef.current !== i && (
-            <div style={{ position: "absolute", left: -6, top: "10%", height: "80%", width: 2.5, borderRadius: 2, background: c.accent, boxShadow: `0 0 6px ${c.accent}`, zIndex: 20, pointerEvents: "none" }} />
+          {overIdx === i && draggingIdx !== i && (
+            <div style={{ position: "absolute", left: -5, top: "5%", height: "90%", width: 2.5, borderRadius: 2, background: c.accent, boxShadow: `0 0 6px ${c.accent}`, zIndex: 20, pointerEvents: "none" }} />
           )}
           <span
             draggable
@@ -1448,19 +1442,13 @@ function DraggableTags({ tags, noteId, s, c, view, onReorderTabs }) {
             onDrop={e => onDrop(e, i)}
             onDragEnd={onDragEnd}
             title="Drag to reorder — first tag sets card color"
-            style={{
-              ...s.tag,
-              opacity: dragIdxRef.current === i ? 0.3 : 1,
-              cursor: "grab",
-              userSelect: "none",
-            }}
+            style={{ ...s.tag, opacity: draggingIdx === i ? 0.25 : 1, cursor: "grab", userSelect: "none" }}
           >
             {i === 0 && <span style={{ fontSize: 9, opacity: 0.55, marginRight: 2 }}>★</span>}
             {t.label}
           </span>
-          {/* insertion line AFTER last tag */}
-          {overIdx === i + 1 && i === tags.length - 1 && dragIdxRef.current !== i && (
-            <div style={{ position: "absolute", right: -6, top: "10%", height: "80%", width: 2.5, borderRadius: 2, background: c.accent, boxShadow: `0 0 6px ${c.accent}`, zIndex: 20, pointerEvents: "none" }} />
+          {overIdx === i + 1 && i === tags.length - 1 && draggingIdx !== i && (
+            <div style={{ position: "absolute", right: -5, top: "5%", height: "90%", width: 2.5, borderRadius: 2, background: c.accent, boxShadow: `0 0 6px ${c.accent}`, zIndex: 20, pointerEvents: "none" }} />
           )}
         </div>
       ))}

@@ -712,8 +712,9 @@ export default function NoteApp() {
 
   // Get the primary category color for a note (first matching category by sidebar order)
   const getNoteColor = (note) => {
-    for (const cat of categories) {
-      if (note.tabs?.includes(cat.id) && cat.color) return cat.color;
+    for (const id of (note.tabs || [])) {
+      const cat = categories.find(c => c.id === id);
+      if (cat?.color) return cat.color;
     }
     return null;
   };
@@ -1466,7 +1467,7 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
   const [hover, setHover] = useState(false);
   const [editingField, setEditingField] = useState(null);
   const [draft, setDraft] = useState({ title: note.title, body: note.body });
-  const noteTabs = tabs.filter(t => note.tabs?.includes(t.id));
+  const noteTabs = (note.tabs || []).map(id => tabs.find(t => t.id === id)).filter(Boolean);
   const clickTimer = useRef(null);
 
   const startInlineEdit = (field, e) => {
@@ -1590,7 +1591,7 @@ function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragSta
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(note.title);
   const clickTimer = useRef(null);
-  const noteTabs = tabs.filter(t => note.tabs?.includes(t.id));
+  const noteTabs = (note.tabs || []).map(id => tabs.find(t => t.id === id)).filter(Boolean);
 
   const commitTitle = () => {
     if (titleDraft.trim() && titleDraft !== note.title) {

@@ -326,7 +326,17 @@ export default function NoteApp() {
     setColorPickerTabId(null);
   };
 
-  const onTabDragStart = (e, id) => { setDragTabId(id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", id); };
+  const onTabDragStart = (e, id) => {
+    setDragTabId(id);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", id);
+    // Use invisible ghost — just like note cards — so no dark box appears
+    const ghost = document.createElement("div");
+    ghost.style.cssText = "width:1px;height:1px;opacity:0;position:fixed;top:-9999px";
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, 0, 0);
+    setTimeout(() => document.body.removeChild(ghost), 0);
+  };
   const onTabDragOver = (e, id) => { e.preventDefault(); setDragOverTabId(id); };
   const onTabDrop = async (e, targetId) => {
     e.preventDefault();

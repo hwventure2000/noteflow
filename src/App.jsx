@@ -685,7 +685,7 @@ export default function NoteApp() {
     btn: (v = "primary") => ({ display: "inline-flex", alignItems: "center", gap: 5, padding: "7px 13px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600, background: v === "primary" ? c.accent : v === "danger" ? c.danger : v === "success" ? c.success : c.accentSoft, color: v === "ghost" ? c.text : "#fff", whiteSpace: "nowrap" }),
     iconBtn: (col) => ({ background: "none", border: "none", cursor: "pointer", color: col || c.muted, display: "inline-flex", alignItems: "center", padding: 4, borderRadius: 6 }),
     content: { flex: 1, overflowY: "auto", padding: 20 },
-    grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 13 },
+    grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 13, alignItems: "start" },
     listWrap: { display: "flex", flexDirection: "column", gap: 8 },
     card: (pri, dragging, dragOver, catColor, selected, insertBefore, insertAfter) => ({ background: catColor ? catColor + "18" : c.card, border: `2px solid ${selected ? (catColor || c.accent) : pri ? c.accent + "55" : catColor ? catColor + "44" : c.border}`, borderRadius: 13, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 9, opacity: dragging ? 0.15 : 1, cursor: "grab", transition: "border-color 0.12s, opacity 0.12s, box-shadow 0.15s", boxShadow: selected ? `0 0 0 3px ${(catColor || c.accent)}44` : insertBefore ? `0 -4px 0 0 ${c.accent}, 0 0 8px ${c.accent}66` : insertAfter ? `0 4px 0 0 ${c.accent}, 0 0 8px ${c.accent}66` : "none" }),
     listCard: (pri, dragging, dragOver, catColor, selected, insertBefore, insertAfter) => ({ background: catColor ? catColor + "18" : c.card, border: `2px solid ${selected ? (catColor || c.accent) : pri ? c.accent + "44" : catColor ? catColor + "44" : c.border}`, borderRadius: 10, padding: "11px 16px", display: "flex", alignItems: "flex-start", gap: 10, opacity: dragging ? 0.15 : 1, cursor: "grab", transition: "border-color 0.12s, box-shadow 0.15s", boxShadow: selected ? `0 0 0 3px ${(catColor || c.accent)}44` : insertBefore ? `0 -4px 0 0 ${c.accent}, 0 0 8px ${c.accent}66` : insertAfter ? `0 4px 0 0 ${c.accent}, 0 0 8px ${c.accent}66` : "none" }),
@@ -872,12 +872,10 @@ export default function NoteApp() {
           ) : viewMode === "grid" ? (
             <div style={s.grid}>
               {sorted.map((note, index) => (
-                <div key={note.id} style={{ position: "relative" }}>
-                  {/* vertical line on LEFT edge — insert before this card */}
+                <div key={note.id} style={{ position: "relative", minWidth: 0 }}>
                   {draggingNoteId && dragOverIndex === index && draggingNoteId !== note.id && (
                     <div style={{ position: "absolute", left: -8, top: "10%", height: "80%", width: 3, borderRadius: 2, background: c.accent, boxShadow: `0 0 8px ${c.accent}`, zIndex: 10, pointerEvents: "none" }} />
                   )}
-                  {/* vertical line on RIGHT edge — insert after last card */}
                   {draggingNoteId && dragOverIndex === index + 1 && draggingNoteId !== note.id && (
                     <div style={{ position: "absolute", right: -8, top: "10%", height: "80%", width: 3, borderRadius: 2, background: c.accent, boxShadow: `0 0 8px ${c.accent}`, zIndex: 10, pointerEvents: "none" }} />
                   )}

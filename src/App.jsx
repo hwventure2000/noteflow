@@ -1409,14 +1409,18 @@ function DraggableTags({ tags, noteId, s, c, view, onReorderTabs }) {
     e.preventDefault();
     e.stopPropagation();
     const srcIdx = draggingIdxRef.current;
-    const insertAt = overIdx ?? i;
     draggingIdxRef.current = null;
     setDraggingIdx(null);
     setOverIdx(null);
-    if (srcIdx === null || srcIdx === insertAt || srcIdx === insertAt - 1) return;
+    if (srcIdx === null) return;
+    // Use the drop target index directly — insert before it
+    const rect = e.currentTarget.getBoundingClientRect();
+    const isBefore = e.clientX < rect.left + rect.width / 2;
+    const insertAt = isBefore ? i : i + 1;
+    const adjusted = insertAt > srcIdx ? insertAt - 1 : insertAt;
+    if (adjusted === srcIdx) return; // no real movement
     const arr = [...tags];
     const [moved] = arr.splice(srcIdx, 1);
-    const adjusted = insertAt > srcIdx ? insertAt - 1 : insertAt;
     arr.splice(adjusted, 0, moved);
     onReorderTabs(arr.map(t => t.id));
   };

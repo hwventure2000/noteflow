@@ -205,6 +205,7 @@ export default function NoteApp() {
   const [search, setSearch] = useState("");
   const [view, setView] = useState("all");
   const [sortOrder, setSortOrder] = useState("newToOld");
+  const [selectedNoteId, setSelectedNoteId] = useState(null);
   const [viewMode, setViewMode] = useState("grid");
   const [dragOverNoteId, setDragOverNoteId] = useState(null);
   const [draggingNoteId, setDraggingNoteId] = useState(null);
@@ -655,6 +656,14 @@ export default function NoteApp() {
   });
   const fileIcon = (type) => type?.startsWith("image/") ? "🖼️" : type === "application/pdf" ? "📄" : type?.includes("word") || type?.includes("doc") ? "📝" : "📎";
 
+  // Get the primary category color for a note (first matching category by sidebar order)
+  const getNoteColor = (note) => {
+    for (const cat of categories) {
+      if (note.tabs?.includes(cat.id) && cat.color) return cat.color;
+    }
+    return null;
+  };
+
   const s = {
     app: { display: "flex", height: "100vh", width: "100vw", background: c.bg, color: c.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", overflow: "hidden", fontSize: 14 },
     sidebar: { width: sidebarCollapsed ? 0 : 220, minWidth: sidebarCollapsed ? 0 : 220, background: c.sidebar, borderRight: sidebarCollapsed ? "none" : `1px solid ${c.border}`, display: "flex", flexDirection: "column", overflow: "hidden", transition: "width 0.22s cubic-bezier(0.4,0,0.2,1), min-width 0.22s" },
@@ -668,8 +677,8 @@ export default function NoteApp() {
     content: { flex: 1, overflowY: "auto", padding: 20 },
     grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 13 },
     listWrap: { display: "flex", flexDirection: "column", gap: 8 },
-    card: (pri, dragging, dragOver) => ({ background: c.card, border: `2px solid ${dragOver ? c.accent : pri ? c.accent + "55" : c.border}`, borderRadius: 13, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 9, opacity: dragging ? 0.15 : 1, cursor: "grab", transition: "border-color 0.12s, opacity 0.12s", boxShadow: dragOver ? `0 0 0 3px ${c.accent}33` : "none" }),
-    listCard: (pri, dragging, dragOver) => ({ background: c.card, border: `2px solid ${dragOver ? c.accent : pri ? c.accent + "44" : c.border}`, borderRadius: 10, padding: "11px 16px", display: "flex", alignItems: "flex-start", gap: 10, opacity: dragging ? 0.15 : 1, cursor: "grab", transition: "border-color 0.12s" }),
+    card: (pri, dragging, dragOver, catColor, selected) => ({ background: catColor ? catColor + "18" : c.card, border: `2px solid ${selected ? (catColor || c.accent) : dragOver ? c.accent : pri ? c.accent + "55" : catColor ? catColor + "44" : c.border}`, borderRadius: 13, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 9, opacity: dragging ? 0.15 : 1, cursor: "grab", transition: "border-color 0.12s, opacity 0.12s, box-shadow 0.15s", boxShadow: selected ? `0 0 0 3px ${(catColor || c.accent)}44` : dragOver ? `0 0 0 3px ${c.accent}33` : "none" }),
+    listCard: (pri, dragging, dragOver, catColor, selected) => ({ background: catColor ? catColor + "18" : c.card, border: `2px solid ${selected ? (catColor || c.accent) : dragOver ? c.accent : pri ? c.accent + "44" : catColor ? catColor + "44" : c.border}`, borderRadius: 10, padding: "11px 16px", display: "flex", alignItems: "flex-start", gap: 10, opacity: dragging ? 0.15 : 1, cursor: "grab", transition: "border-color 0.12s, box-shadow 0.15s", boxShadow: selected ? `0 0 0 3px ${(catColor || c.accent)}44` : "none" }),
     modal: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 },
     mbox: { background: c.card, border: `1px solid ${c.border}`, borderRadius: 18, padding: 24, width: "100%", maxWidth: 540, maxHeight: "90vh", overflowY: "auto" },
     inp: { width: "100%", background: c.input, border: `1px solid ${c.inputBorder}`, borderRadius: 9, padding: "9px 12px", color: c.text, fontSize: 13.5, outline: "none", boxSizing: "border-box" },
@@ -827,6 +836,7 @@ export default function NoteApp() {
           <select style={{ ...s.inp, width: "auto", fontSize: 12, padding: "6px 10px" }} value={sortOrder} onChange={e => setSortOrder(e.target.value)}>
             <option value="newToOld">Newest first</option>
             <option value="oldToNew">Oldest first</option>
+            <option value="manual">Manual order</option>
           </select>
           <button style={{ ...s.btn("ghost"), padding: "6px 10px" }} onClick={() => setViewMode(v => v === "grid" ? "list" : "grid")}>
             <Ico d={viewMode === "grid" ? "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" : "M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"} />
@@ -861,7 +871,10 @@ export default function NoteApp() {
                   onTogglePriority={() => togglePriority(note.id, note.priority)} onShare={() => setShareModal(note)}
                   onHistory={() => setHistoryModal(note)}
                   onRestore={() => view === "trash" ? restoreFromTrash(note.id) : restoreFromCompleted(note.id)}
-                  onInlineSave={inlineSaveNote} />
+                  onInlineSave={inlineSaveNote}
+                  catColor={getNoteColor(note)}
+                  selected={selectedNoteId === note.id}
+                  onSelect={() => setSelectedNoteId(note.id)} />
               ))}
             </div>
           ) : (
@@ -876,7 +889,10 @@ export default function NoteApp() {
                   onTogglePriority={() => togglePriority(note.id, note.priority)} onShare={() => setShareModal(note)}
                   onHistory={() => setHistoryModal(note)}
                   onRestore={() => view === "trash" ? restoreFromTrash(note.id) : restoreFromCompleted(note.id)}
-                  onInlineSave={inlineSaveNote} />
+                  onInlineSave={inlineSaveNote}
+                  catColor={getNoteColor(note)}
+                  selected={selectedNoteId === note.id}
+                  onSelect={() => setSelectedNoteId(note.id)} />
               ))}
             </div>
           )}
@@ -1240,7 +1256,7 @@ function ScanReviewModal({ reviewNotes, setReviewNotes, tabs, s, c, onAcceptAll,
 
 // ── Grid Card ─────────────────────────────────────────────────────────────────
 // CHANGE: single-click title = inline edit; double-click anywhere on card = open modal
-function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, fileIcon, onEdit, onTrash, onDelete, onToggleComplete, onTogglePriority, onShare, onHistory, onRestore, onInlineSave }) {
+function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, fileIcon, onEdit, onTrash, onDelete, onToggleComplete, onTogglePriority, onShare, onHistory, onRestore, onInlineSave, catColor, selected, onSelect }) {
   const [hover, setHover] = useState(false);
   const [editingField, setEditingField] = useState(null);
   const [draft, setDraft] = useState({ title: note.title, body: note.body });
@@ -1261,19 +1277,17 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
     setEditingField(null);
   };
 
-  // Single click on title = inline edit; double click on card = open modal
   const handleTitleClick = (e) => {
     if (view !== "all") return;
     e.stopPropagation();
+    onSelect();
     if (clickTimer.current) {
       clearTimeout(clickTimer.current);
       clickTimer.current = null;
-      // double click — open modal
       onEdit();
     } else {
       clickTimer.current = setTimeout(() => {
         clickTimer.current = null;
-        // single click — inline edit
         startInlineEdit("title", e);
       }, 220);
     }
@@ -1291,7 +1305,8 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
       onDragStart={editingField ? undefined : onDragStart}
       onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
       onDoubleClick={handleCardDoubleClick}
-      style={{ ...s.card(note.priority && view === "all", isDragging, isDragOver), background: isDragOver ? c.accentSoft : hover ? c.cardHover : c.card }}
+      onClick={onSelect}
+      style={{ ...s.card(note.priority && view === "all", isDragging, isDragOver, catColor, selected), background: isDragOver ? c.accentSoft : catColor ? catColor + "18" : hover ? c.cardHover : c.card }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
         {view !== "trash" && (
@@ -1359,7 +1374,7 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
 
 // ── List Row ──────────────────────────────────────────────────────────────────
 // CHANGE: single-click title = inline edit; double-click row = open modal
-function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, fileIcon, onEdit, onTrash, onDelete, onToggleComplete, onTogglePriority, onShare, onHistory, onRestore, onInlineSave }) {
+function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, fileIcon, onEdit, onTrash, onDelete, onToggleComplete, onTogglePriority, onShare, onHistory, onRestore, onInlineSave, catColor, selected, onSelect }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(note.title);
   const clickTimer = useRef(null);
@@ -1375,6 +1390,7 @@ function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragSta
   const handleTitleClick = (e) => {
     if (view !== "all") return;
     e.stopPropagation();
+    onSelect();
     if (clickTimer.current) {
       clearTimeout(clickTimer.current);
       clickTimer.current = null;
@@ -1390,8 +1406,9 @@ function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragSta
 
   return (
     <div draggable={!editingTitle} onDragStart={editingTitle ? undefined : onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
+      onClick={onSelect}
       onDoubleClick={view === "all" && !editingTitle ? onEdit : undefined}
-      style={{ ...s.listCard(note.priority && view === "all", isDragging, isDragOver) }}>
+      style={{ ...s.listCard(note.priority && view === "all", isDragging, isDragOver, catColor, selected) }}>
       {view !== "trash" && (
         <div onClick={e => { e.stopPropagation(); onToggleComplete(); }} style={{ width: 17, height: 17, borderRadius: 5, border: `2px solid ${note.completed ? c.success : c.border}`, background: note.completed ? c.success : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, marginTop: 2 }}>
           {note.completed && <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>}

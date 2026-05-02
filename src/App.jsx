@@ -853,7 +853,7 @@ export default function NoteApp() {
         </div>
 
         <div style={s.content}
-          onDragOver={e => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }}
+          onDragOver={e => { e.preventDefault(); }}
           onDrop={e => {
             e.preventDefault();
             const file = Array.from(e.dataTransfer.files).find(f => f.name.endsWith(".ics"));

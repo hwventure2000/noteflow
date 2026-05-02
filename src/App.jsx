@@ -444,8 +444,10 @@ export default function NoteApp() {
     e.preventDefault(); e.stopPropagation();
     const sourceId = _dragNoteId; _dragNoteId = null; setDraggingNoteId(null); setDragOverNoteId(null);
     if (!sourceId || sourceId === targetId) return;
+    setSortOrder("manual");
     setNotes(ns => {
-      const arr = [...ns];
+      // Work from the currently displayed sorted order so drop position matches what user sees
+      const arr = [...ns].sort((a, b) => a.order - b.order);
       const fi = arr.findIndex(n => n.id === sourceId), ti = arr.findIndex(n => n.id === targetId);
       if (fi === -1 || ti === -1) return ns;
       const [moved] = arr.splice(fi, 1); arr.splice(ti, 0, moved);
@@ -453,7 +455,6 @@ export default function NoteApp() {
       updated.forEach(n => sb.from("notes").update({ position: n.order }).eq("id", n.id));
       return updated;
     });
-    setSortOrder("manual");
   }, []);
   const handleDragEnd = useCallback(() => { _dragNoteId = null; setDraggingNoteId(null); setDragOverNoteId(null); }, []);
 
@@ -1305,7 +1306,7 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
       onDragStart={editingField ? undefined : onDragStart}
       onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
       onDoubleClick={handleCardDoubleClick}
-      onClick={onSelect}
+      onClick={e => { if (!isDragging) onSelect(); }}
       style={{ ...s.card(note.priority && view === "all", isDragging, isDragOver, catColor, selected), background: isDragOver ? c.accentSoft : catColor ? catColor + "18" : hover ? c.cardHover : c.card }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
@@ -1406,7 +1407,7 @@ function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragSta
 
   return (
     <div draggable={!editingTitle} onDragStart={editingTitle ? undefined : onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
-      onClick={onSelect}
+      onClick={e => { if (!isDragging) onSelect(); }}
       onDoubleClick={view === "all" && !editingTitle ? onEdit : undefined}
       style={{ ...s.listCard(note.priority && view === "all", isDragging, isDragOver, catColor, selected) }}>
       {view !== "trash" && (

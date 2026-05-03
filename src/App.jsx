@@ -1024,7 +1024,10 @@ export default function NoteApp() {
         <div style={s.modal} onClick={() => setNoteModal(null)}>
           <div style={s.mbox} onClick={e => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>{noteModal === "new" ? "✏️ New Note" : "✏️ Edit Note"}</div>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700 }}>{noteModal === "new" ? "✏️ New Note" : "✏️ Edit Note"}</div>
+                {noteModal !== "new" && <div style={{ fontSize: 11.5, color: c.muted, marginTop: 3 }}>Created {fmt(noteModal.createdAt)}</div>}
+              </div>
               <button style={s.iconBtn()} onClick={() => setNoteModal(null)}><Ico d="M18 6L6 18M6 6l12 12" /></button>
             </div>
             <NoteForm form={form} setForm={setForm} s={s} c={c} tabs={tabs} listening={listening}
@@ -1583,7 +1586,7 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
       {noteTabs.length > 0 && (
         <DraggableTags tags={noteTabs} noteId={note.id} s={s} c={c} view={view} onReorderTabs={onReorderTabs} />
       )}
-      {(!note.tabs || note.tabs.length === 0) && view === "all" && <span style={{ ...s.tag, background: c.border, color: c.muted }}>Uncategorized</span>}
+
       {note.reminder && <div style={{ fontSize: 12, color: c.muted }}>⏰ {fmt(new Date(note.reminder).getTime())}</div>}
       {(note.sharedWith?.length > 0 || note.shareLink) && <div style={{ fontSize: 12, color: c.accent }}>🔗 Shared{note.sharedWith?.length > 0 ? ` with ${note.sharedWith.length}` : " via link"}</div>}
       <div style={{ display: "flex", gap: 2, paddingTop: 8, borderTop: `1px solid ${c.border}`, alignItems: "center" }}>
@@ -1599,7 +1602,7 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
           <button style={s.iconBtn()} title="History" onClick={e => { e.stopPropagation(); onHistory(); }}><Ico d="M12 8v4l3 3M3.05 11a9 9 0 1017.9 0" /></button>
           <button style={{ ...s.iconBtn(c.danger), marginLeft: "auto" }} title="Trash" onClick={e => { e.stopPropagation(); onTrash(); }}><Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></button>
         </>)}
-        <div style={{ fontSize: 11, color: c.muted, marginLeft: view !== "all" ? "auto" : 0 }}>{fmt(note.createdAt)}</div>
+
       </div>
     </div>
   );
@@ -1665,7 +1668,7 @@ function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragSta
             </span>
           )}
           {!editingTitle && noteTabs.map(t => <span key={t.id} style={{ ...s.tag, fontSize: 11 }}>{t.label}</span>)}
-          {!editingTitle && (!note.tabs || note.tabs.length === 0) && view === "all" && <span style={{ ...s.tag, fontSize: 11, background: c.border, color: c.muted }}>Uncategorized</span>}
+
           {!editingTitle && note.attachments?.length > 0 && <span style={{ fontSize: 12, color: c.muted }}>{note.attachments.length} 📎</span>}
           {!editingTitle && note.reminder && <span style={{ fontSize: 11.5, color: c.muted }}>⏰ {new Date(note.reminder).toLocaleDateString()}</span>}
         </div>
@@ -1674,7 +1677,7 @@ function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragSta
       <div style={{ display: "flex", gap: 2, alignItems: "center", flexShrink: 0 }}>
         <Star filled={note.priority} size={13} onClick={e => { e.stopPropagation(); onTogglePriority(); }} />
         {note.pinned && <span title="Pinned" style={{ fontSize: 12, flexShrink: 0 }}>📌</span>}
-        <span style={{ fontSize: 11, color: c.muted, marginRight: 4, marginLeft: 4 }}>{fmt(note.createdAt)}</span>
+
         {view === "trash" ? (<>
           <button style={s.iconBtn(c.success)} onClick={e => { e.stopPropagation(); onRestore(); }}><Ico d="M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" /></button>
           <button style={s.iconBtn(c.danger)} onClick={e => { e.stopPropagation(); onDelete(); }}><Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></button>

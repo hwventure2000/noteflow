@@ -942,6 +942,7 @@ export default function NoteApp() {
 
         <div style={s.content}
           onClick={() => { setContextMenu(null); }}
+          onDoubleClick={e => { if (e.target === e.currentTarget && view === "all") openNew(); }}
           onContextMenu={e => { if (e.target === e.currentTarget && view === "all") { e.preventDefault(); openNew(); } }}
           onDragOver={e => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }}
           onDrop={e => {

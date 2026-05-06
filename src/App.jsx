@@ -1034,7 +1034,8 @@ export default function NoteApp() {
               startListening={startListening} ocrLoading={ocrLoading} ocrPreview={ocrPreview}
               fileRef={fileRef} ocrFileRef={ocrFileRef} handleFiles={handleFiles}
               handleOcrFile={handleOcrFile} openCamera={openCamera} dropActive={dropActive} setDropActive={setDropActive}
-              onAddCategory={() => { setAddTabFromNote(true); setAddTabModal(true); }} />
+              onAddCategory={() => { setAddTabFromNote(true); setAddTabModal(true); }}
+              onSave={saveNote} />
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 20 }}>
               <button style={s.btn("ghost")} onClick={() => setNoteModal(null)}>Cancel</button>
               <button style={s.btn("primary")} onClick={saveNote}>Save Note</button>
@@ -1258,14 +1259,14 @@ function ReminderBanner({ alert, c, onDismiss, onSnooze, onOpen }) {
   );
 }
 
-function NoteForm({ form, setForm, s, c, tabs, listening, startListening, ocrLoading, ocrPreview, fileRef, ocrFileRef, handleFiles, handleOcrFile, openCamera, dropActive, setDropActive, onAddCategory }) {
+function NoteForm({ form, setForm, s, c, tabs, listening, startListening, ocrLoading, ocrPreview, fileRef, ocrFileRef, handleFiles, handleOcrFile, openCamera, dropActive, setDropActive, onAddCategory, onSave }) {
   const [uploadHover, setUploadHover] = useState(false);
   const [cameraHover, setCameraHover] = useState(false);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div>
         <label style={s.lbl}>Title</label>
-        <input autoFocus style={s.inp} placeholder="Note title…" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
+        <input autoFocus style={s.inp} placeholder="Note title…" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} onKeyDown={e => { if (e.key === "Enter" && form.title.trim()) onSave(); }} />
       </div>
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
@@ -1316,8 +1317,8 @@ function NoteForm({ form, setForm, s, c, tabs, listening, startListening, ocrLoa
           )}
         </div>
       </div>
-      <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13.5, fontWeight: 500 }}>
-        <Star filled={form.priority} size={17} onClick={() => setForm(f => ({ ...f, priority: !f.priority }))} /> Priority
+      <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13.5, fontWeight: 500 }} onClick={() => setForm(f => ({ ...f, priority: !f.priority }))}>
+        <Star filled={form.priority} size={17} onClick={e => e.stopPropagation()} /> Priority
       </label>
       <div>
         <label style={s.lbl}>Reminder</label>

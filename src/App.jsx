@@ -226,7 +226,7 @@ export default function NoteApp() {
   const [sortOrder, setSortOrder] = useState("newToOld");
   const [selectedNoteId, setSelectedNoteId] = useState(null);
   const [multiSelectedIds, setMultiSelectedIds] = useState(new Set());
-  const [contextMenu, setContextMenu] = useState(null); // {x, y, note}
+  const [contextMenu, setContextMenu] = useState(null);
   const [viewMode, setViewMode] = useState("grid");
   const [dragOverNoteId, setDragOverNoteId] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
@@ -368,7 +368,6 @@ export default function NoteApp() {
     setDragTabId(id);
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", id);
-    // Use invisible ghost — just like note cards — so no dark box appears
     const ghost = document.createElement("div");
     ghost.style.cssText = "width:1px;height:1px;opacity:0;position:fixed;top:-9999px";
     document.body.appendChild(ghost);
@@ -451,13 +450,22 @@ export default function NoteApp() {
     setNoteModal(null); setOcrPreview(null);
   };
 
+  // CHANGE 1: trashNote fires state update immediately (optimistic), DB call is background fire-and-forget
   const updateNote = async (id, patch, histAction) => {
     await sb.from("notes").update(patch).eq("id", id);
     if (histAction) await sb.from("note_history").insert({ note_id: id, user_id: session.user.id, action: histAction });
     setNotes(ns => ns.map(n => n.id === id ? { ...n, ...patch, history: histAction ? [...n.history, { user: "You", action: histAction, at: nowTs() }] : n.history } : n));
   };
 
-  const trashNote = (id) => updateNote(id, { trashed: true, trashed_at: new Date().toISOString() }, "Moved to trash");
+  const trashNote = (id) => {
+    // Optimistic: update UI immediately, then persist in background
+    const trashedAt = new Date().toISOString();
+    setNotes(ns => ns.map(n => n.id === id ? { ...n, trashed: true, trashed_at: trashedAt, history: [...(n.history || []), { user: "You", action: "Moved to trash", at: nowTs() }] } : n));
+    sb.from("notes").update({ trashed: true, trashed_at: trashedAt }).eq("id", id).then(() => {
+      sb.from("note_history").insert({ note_id: id, user_id: session.user.id, action: "Moved to trash" });
+    });
+  };
+
   const restoreFromTrash = (id) => updateNote(id, { trashed: false, trashed_at: null }, "Restored from trash");
   const togglePin = (id, cur) => updateNote(id, { pinned: !cur }, cur ? "Unpinned" : "Pinned to top");
   const deletePermanently = async (id) => { await sb.from("notes").delete().eq("id", id); setNotes(ns => ns.filter(n => n.id !== id)); };
@@ -504,13 +512,11 @@ export default function NoteApp() {
     if (!_dragNoteId || _dragNoteId === id) return;
     setDragOverNoteId(id);
     const rect = e.currentTarget.getBoundingClientRect();
-    // Grid cards are ~280px wide, list rows are full width — use width to distinguish
     const isGrid = rect.width < 600;
     const isBefore = isGrid ? e.clientX < rect.left + rect.width / 2 : e.clientY < rect.top + rect.height / 2;
     setDragOverIndex(isBefore ? index : index + 1);
   }, []);
   const handleDrop = useCallback((e, targetId) => {
-    // Ignore tag reorder drags — let the tag's own onDrop handle it
     if (e.dataTransfer.types.includes("tag-drag")) return;
     e.preventDefault(); e.stopPropagation();
     const sourceId = _dragNoteId; _dragNoteId = null; setDraggingNoteId(null); setDragOverNoteId(null); setDragOverIndex(null);
@@ -720,7 +726,6 @@ export default function NoteApp() {
     return true;
   });
   const sorted = [...visibleNotes].sort((a, b) => {
-    // Pinned always first
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
     if (sortOrder === "manual") return a.order - b.order;
     if (view === "all" && a.priority !== b.priority) return a.priority ? -1 : 1;
@@ -729,7 +734,6 @@ export default function NoteApp() {
   });
   const fileIcon = (type) => type?.startsWith("image/") ? "🖼️" : type === "application/pdf" ? "📄" : type?.includes("word") || type?.includes("doc") ? "📝" : "📎";
 
-  // Get the primary category color for a note (first matching category by sidebar order)
   const getNoteColor = (note) => {
     for (const id of (note.tabs || [])) {
       const cat = categories.find(c => c.id === id);
@@ -771,7 +775,6 @@ export default function NoteApp() {
     <div style={s.app}>
       {/* ── sidebar ── */}
       <div style={s.sidebar}>
-        {/* CHANGE: Logo replaced with webp image + styled wordmark */}
         <div style={{ padding: "14px 16px 12px", borderBottom: `1px solid ${c.border}`, display: "flex", alignItems: "center", gap: 10 }}>
           <svg width="38" height="38" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
             <rect width="100" height="100" rx="22" fill="url(#bg)"/>
@@ -781,13 +784,9 @@ export default function NoteApp() {
                 <stop offset="100%" stopColor="#5B3FD4"/>
               </linearGradient>
             </defs>
-            {/* curled page shadow */}
             <path d="M62 82 Q78 80 80 65 L80 30 Q80 24 74 24 L44 24 Q38 24 38 30 L38 76 Q50 88 62 82Z" fill="#4A2FB0" opacity="0.5"/>
-            {/* main page */}
             <path d="M58 78 Q74 76 76 61 L76 26 Q76 20 70 20 L40 20 Q34 20 34 26 L34 72 Q46 84 58 78Z" fill="white"/>
-            {/* curl triangle */}
             <path d="M34 72 Q34 84 46 84 Q46 84 34 72Z" fill="#C4B8F8" opacity="0.6"/>
-            {/* text lines */}
             <rect x="42" y="33" width="24" height="4" rx="2" fill="#A99EF0"/>
             <rect x="42" y="43" width="22" height="4" rx="2" fill="#A99EF0"/>
             <rect x="42" y="53" width="16" height="4" rx="2" fill="#A99EF0"/>
@@ -834,7 +833,6 @@ export default function NoteApp() {
                   title={t.fixed ? "" : "Drop a note here · Double-click to rename"}
                 >
                   {!t.fixed && <span style={{ color: dragOverCategoryId === t.id ? (t.color || c.accent) : c.muted, fontSize: 13, cursor: "grab" }}>⠿</span>}
-                  {/* color dot for custom categories */}
                   {!t.fixed && (
                     <span
                       onClick={e => { e.stopPropagation(); setColorPickerTabId(colorPickerTabId === t.id ? null : t.id); }}
@@ -852,7 +850,6 @@ export default function NoteApp() {
                   )}
                 </div>
               )}
-              {/* color picker popover */}
               {colorPickerTabId === t.id && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 16px 10px", background: c.card, borderBottom: `1px solid ${c.border}` }}>
                   {CAT_COLORS.map(col => (
@@ -899,7 +896,6 @@ export default function NoteApp() {
       {/* ── main ── */}
       <div style={s.main}>
         <div style={s.topbar}>
-          {/* Chevron: points left (collapse) when open, points right (expand) when closed */}
           <button style={{ ...s.iconBtn(c.muted), padding: "6px 8px" }} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setSidebarCollapsed(v => !v)}>
             <Ico d={sidebarCollapsed ? "M9 18l6-6-6-6" : "M15 18l-6-6 6-6"} size={17} />
           </button>
@@ -987,11 +983,9 @@ export default function NoteApp() {
             <div style={s.listWrap}>
               {sorted.map((note, index) => (
                 <div key={note.id} style={{ position: "relative" }}>
-                  {/* horizontal line ABOVE row — insert before */}
                   {draggingNoteId && dragOverIndex === index && draggingNoteId !== note.id && (
                     <div style={{ position: "absolute", top: -5, left: 0, right: 0, height: 3, borderRadius: 2, background: c.accent, boxShadow: `0 0 8px ${c.accent}`, zIndex: 10, pointerEvents: "none" }} />
                   )}
-                  {/* horizontal line BELOW last row — insert after */}
                   {draggingNoteId && dragOverIndex === index + 1 && index === sorted.length - 1 && draggingNoteId !== note.id && (
                     <div style={{ position: "absolute", bottom: -5, left: 0, right: 0, height: 3, borderRadius: 2, background: c.accent, boxShadow: `0 0 8px ${c.accent}`, zIndex: 10, pointerEvents: "none" }} />
                   )}
@@ -1024,12 +1018,16 @@ export default function NoteApp() {
       {noteModal && (
         <div style={s.modal} onClick={() => setNoteModal(null)}>
           <div style={s.mbox} onClick={e => e.stopPropagation()}>
+            {/* CHANGE 4: Save Note button added to top header row */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
               <div>
                 <div style={{ fontSize: 16, fontWeight: 700 }}>{noteModal === "new" ? "✏️ New Note" : "✏️ Edit Note"}</div>
                 {noteModal !== "new" && <div style={{ fontSize: 11.5, color: c.muted, marginTop: 3 }}>Created {fmt(noteModal.createdAt)}</div>}
               </div>
-              <button style={s.iconBtn()} onClick={() => setNoteModal(null)}><Ico d="M18 6L6 18M6 6l12 12" /></button>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button style={s.btn("primary")} onClick={saveNote}>Save Note</button>
+                <button style={s.iconBtn()} onClick={() => setNoteModal(null)}><Ico d="M18 6L6 18M6 6l12 12" /></button>
+              </div>
             </div>
             <NoteForm form={form} setForm={setForm} s={s} c={c} tabs={tabs} listening={listening}
               startListening={startListening} ocrLoading={ocrLoading} ocrPreview={ocrPreview}
@@ -1408,7 +1406,6 @@ function ScanReviewModal({ reviewNotes, setReviewNotes, tabs, s, c, onAcceptAll,
 function DraggableTags({ tags, noteId, s, c, view, onReorderTabs }) {
   const [draggingIdx, setDraggingIdx] = useState(null);
   const [overIdx, setOverIdx] = useState(null);
-  // ref mirrors draggingIdx so drop handler always has the current value
   const draggingIdxRef = useRef(null);
 
   if (view !== "all") {
@@ -1439,12 +1436,11 @@ function DraggableTags({ tags, noteId, s, c, view, onReorderTabs }) {
     setDraggingIdx(null);
     setOverIdx(null);
     if (srcIdx === null) return;
-    // Use the drop target index directly — insert before it
     const rect = e.currentTarget.getBoundingClientRect();
     const isBefore = e.clientX < rect.left + rect.width / 2;
     const insertAt = isBefore ? i : i + 1;
     const adjusted = insertAt > srcIdx ? insertAt - 1 : insertAt;
-    if (adjusted === srcIdx) return; // no real movement
+    if (adjusted === srcIdx) return;
     const arr = [...tags];
     const [moved] = arr.splice(srcIdx, 1);
     arr.splice(adjusted, 0, moved);
@@ -1487,11 +1483,12 @@ function DraggableTags({ tags, noteId, s, c, view, onReorderTabs }) {
 }
 
 // ── Grid Card ─────────────────────────────────────────────────────────────────
-// CHANGE: single-click title = inline edit; double-click anywhere on card = open modal
 function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, fileIcon, onEdit, onTrash, onDelete, onToggleComplete, onTogglePriority, onShare, onHistory, onRestore, onInlineSave, catColor, selected, onSelect, insertBefore, insertAfter, accentColor, multiSelected, onMultiSelect, onContextMenu, onReorderTabs }) {
   const [hover, setHover] = useState(false);
   const [editingField, setEditingField] = useState(null);
   const [draft, setDraft] = useState({ title: note.title, body: note.body });
+  // CHANGE 3: track whether cursor is hovering over the body area specifically
+  const [bodyHover, setBodyHover] = useState(false);
   const noteTabs = (note.tabs || []).map(id => tabs.find(t => t.id === id)).filter(Boolean);
   const clickTimer = useRef(null);
 
@@ -1531,6 +1528,17 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
     onEdit();
   };
 
+  // CHANGE 2: bigger solid-red trash icon SVG component for cards
+  const TrashIcon = ({ size = 18 }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="#ef4444" stroke="#ef4444" strokeWidth={1} strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M8 6V4h8v2" />
+      <rect x="5" y="7" width="14" height="13" rx="1.5" fill="#ef4444" />
+      <line x1="10" y1="11" x2="10" y2="17" stroke="white" strokeWidth="1.5" />
+      <line x1="14" y1="11" x2="14" y2="17" stroke="white" strokeWidth="1.5" />
+    </svg>
+  );
+
   return (
     <div
       draggable={!editingField}
@@ -1569,6 +1577,7 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
         {note.pinned && <span title="Pinned to top" style={{ fontSize: 13, flexShrink: 0 }}>📌</span>}
       </div>
 
+      {/* CHANGE 3: body area — scrollable on hover when content overflows */}
       {editingField === "body" ? (
         <textarea autoFocus style={{ ...s.ta, fontSize: 13, minHeight: 60 }}
           value={draft.body}
@@ -1579,8 +1588,27 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
       ) : (
         <div
           onClick={e => startInlineEdit("body", e)}
+          onMouseEnter={() => setBodyHover(true)}
+          onMouseLeave={() => setBodyHover(false)}
           title={view === "all" ? "Click to edit · Double-click card to open" : ""}
-          style={{ fontSize: 13, color: note.body ? c.muted : c.inputBorder, lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", cursor: view === "all" ? "text" : "default", borderRadius: 4, padding: "1px 2px", minHeight: 18, transition: "background 0.1s" }}
+          style={{
+            fontSize: 13,
+            color: note.body ? c.muted : c.inputBorder,
+            lineHeight: 1.6,
+            // When hovering: expand to show full body, scrollable; otherwise clamp to 3 lines
+            maxHeight: bodyHover ? 180 : "4.8em",
+            overflowY: bodyHover ? "auto" : "hidden",
+            display: bodyHover ? "block" : "-webkit-box",
+            WebkitLineClamp: bodyHover ? undefined : 3,
+            WebkitBoxOrient: bodyHover ? undefined : "vertical",
+            cursor: view === "all" ? "text" : "default",
+            borderRadius: 4,
+            padding: "1px 2px",
+            minHeight: 18,
+            transition: "max-height 0.2s ease",
+            scrollbarWidth: "thin",
+            scrollbarColor: `${c.border} transparent`,
+          }}
         >{note.body || (view === "all" && hover ? "Click to add body…" : "")}</div>
       )}
 
@@ -1594,29 +1622,46 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
       <div style={{ display: "flex", gap: 2, paddingTop: 8, borderTop: `1px solid ${c.border}`, alignItems: "center" }}>
         {view === "trash" ? (<>
           <button style={s.iconBtn(c.success)} title="Restore" onClick={e => { e.stopPropagation(); onRestore(); }}><Ico d="M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" /></button>
-          <button style={s.iconBtn(c.danger)} title="Delete forever" onClick={e => { e.stopPropagation(); onDelete(); }}><Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></button>
+          {/* CHANGE 2: solid red trash icon, bigger */}
+          <button style={{ ...s.iconBtn(c.danger), padding: 4 }} title="Delete forever" onClick={e => { e.stopPropagation(); onDelete(); }}>
+            <TrashIcon size={18} />
+          </button>
         </>) : view === "completed" ? (<>
           <button style={s.iconBtn(c.success)} title="Restore" onClick={e => { e.stopPropagation(); onRestore(); }}><Ico d="M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" /></button>
-          <button style={s.iconBtn(c.danger)} title="Move to trash" onClick={e => { e.stopPropagation(); onTrash(); }}><Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></button>
+          <button style={{ ...s.iconBtn(c.danger), padding: 4 }} title="Move to trash" onClick={e => { e.stopPropagation(); onTrash(); }}>
+            <TrashIcon size={18} />
+          </button>
         </>) : (<>
           <button style={s.iconBtn()} title="Edit" onClick={e => { e.stopPropagation(); onEdit(); }}><Ico d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></button>
           <button style={s.iconBtn()} title="Share" onClick={e => { e.stopPropagation(); onShare(); }}><Ico d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13" /></button>
           <button style={s.iconBtn()} title="History" onClick={e => { e.stopPropagation(); onHistory(); }}><Ico d="M12 8v4l3 3M3.05 11a9 9 0 1017.9 0" /></button>
-          <button style={{ ...s.iconBtn(c.danger), marginLeft: "auto" }} title="Trash" onClick={e => { e.stopPropagation(); onTrash(); }}><Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></button>
+          {/* CHANGE 2: solid red trash icon, bigger, marginLeft auto pushes to right */}
+          <button style={{ ...s.iconBtn(c.danger), marginLeft: "auto", padding: 4 }} title="Trash" onClick={e => { e.stopPropagation(); onTrash(); }}>
+            <TrashIcon size={18} />
+          </button>
         </>)}
-
       </div>
     </div>
   );
 }
 
 // ── List Row ──────────────────────────────────────────────────────────────────
-// CHANGE: single-click title = inline edit; double-click row = open modal
 function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, fileIcon, onEdit, onTrash, onDelete, onToggleComplete, onTogglePriority, onShare, onHistory, onRestore, onInlineSave, catColor, selected, onSelect, insertBefore, insertAfter, multiSelected, onMultiSelect, onContextMenu }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(note.title);
   const clickTimer = useRef(null);
   const noteTabs = (note.tabs || []).map(id => tabs.find(t => t.id === id)).filter(Boolean);
+
+  // CHANGE 2: solid red trash icon for list rows too
+  const TrashIcon = ({ size = 18 }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="#ef4444" stroke="#ef4444" strokeWidth={1} strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M8 6V4h8v2" />
+      <rect x="5" y="7" width="14" height="13" rx="1.5" fill="#ef4444" />
+      <line x1="10" y1="11" x2="10" y2="17" stroke="white" strokeWidth="1.5" />
+      <line x1="14" y1="11" x2="14" y2="17" stroke="white" strokeWidth="1.5" />
+    </svg>
+  );
 
   const commitTitle = () => {
     if (titleDraft.trim() && titleDraft !== note.title) {
@@ -1663,14 +1708,12 @@ function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragSta
               onKeyDown={e => { if (e.key === "Enter") commitTitle(); if (e.key === "Escape") setEditingTitle(false); }}
               onClick={e => e.stopPropagation()} />
           ) : (
-            // CHANGE: note title font bumped to 16px
             <span onClick={handleTitleClick} title={view === "all" ? "Click to edit · Double-click row to open" : ""}
               style={{ fontSize: 16, fontWeight: 600, textDecoration: note.completed ? "line-through" : "none", opacity: note.completed ? 0.55 : 1, cursor: view === "all" ? "text" : "default" }}>
               {note.title}
             </span>
           )}
           {!editingTitle && noteTabs.map(t => <span key={t.id} style={{ ...s.tag, fontSize: 11 }}>{t.label}</span>)}
-
           {!editingTitle && note.attachments?.length > 0 && <span style={{ fontSize: 12, color: c.muted }}>{note.attachments.length} 📎</span>}
           {!editingTitle && note.reminder && <span style={{ fontSize: 11.5, color: c.muted }}>⏰ {new Date(note.reminder).toLocaleDateString()}</span>}
         </div>
@@ -1682,15 +1725,15 @@ function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragSta
 
         {view === "trash" ? (<>
           <button style={s.iconBtn(c.success)} onClick={e => { e.stopPropagation(); onRestore(); }}><Ico d="M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" /></button>
-          <button style={s.iconBtn(c.danger)} onClick={e => { e.stopPropagation(); onDelete(); }}><Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></button>
+          <button style={{ ...s.iconBtn(c.danger), padding: 4 }} onClick={e => { e.stopPropagation(); onDelete(); }}><TrashIcon size={18} /></button>
         </>) : view === "completed" ? (<>
           <button style={s.iconBtn(c.success)} onClick={e => { e.stopPropagation(); onRestore(); }}><Ico d="M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" /></button>
-          <button style={s.iconBtn(c.danger)} onClick={e => { e.stopPropagation(); onTrash(); }}><Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></button>
+          <button style={{ ...s.iconBtn(c.danger), padding: 4 }} onClick={e => { e.stopPropagation(); onTrash(); }}><TrashIcon size={18} /></button>
         </>) : (<>
           <button style={s.iconBtn()} onClick={e => { e.stopPropagation(); onEdit(); }}><Ico d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></button>
           <button style={s.iconBtn()} onClick={e => { e.stopPropagation(); onShare(); }}><Ico d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13" /></button>
           <button style={s.iconBtn()} onClick={e => { e.stopPropagation(); onHistory(); }}><Ico d="M12 8v4l3 3M3.05 11a9 9 0 1017.9 0" /></button>
-          <button style={s.iconBtn(c.danger)} onClick={e => { e.stopPropagation(); onTrash(); }}><Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></button>
+          <button style={{ ...s.iconBtn(c.danger), padding: 4 }} onClick={e => { e.stopPropagation(); onTrash(); }}><TrashIcon size={18} /></button>
         </>)}
       </div>
     </div>

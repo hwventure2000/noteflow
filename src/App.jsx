@@ -357,7 +357,28 @@ export default function NoteApp() {
     setEditingTabId(null);
   };
 
-  const CAT_COLORS = ["#7c6af7","#ef4444","#f59e0b","#10b981","#3b82f6","#ec4899","#8b5cf6","#06b6d4","#f97316","#84cc16"];
+  const CAT_COLORS = [
+    // row 1 — purples & blues
+    "#4a4480","#7c6af7","#8b5cf6","#3b82f6","#06b6d4",
+    // row 2 — warm & vivid
+    "#ef4444","#f97316","#f59e0b","#84cc16","#10b981",
+    // row 3 — pinks & neutrals
+    "#ec4899","#db2777","#a855f7","#64748b","#94a3b8",
+    // row 4 — deep / muted
+    "#1e40af","#065f46","#92400e","#7f1d1d","#312e81",
+  ];
+
+  // Uncategorized tab color — persisted in localStorage, default = Option C purple
+  const [uncategorizedColor, setUncategorizedColor] = useState(() => {
+    try { return localStorage.getItem("nf_uncategorized_color") || "#4a4480"; } catch { return "#4a4480"; }
+  });
+  const [colorPickerUncategorized, setColorPickerUncategorized] = useState(false);
+
+  const saveUncategorizedColor = (col) => {
+    setUncategorizedColor(col);
+    try { localStorage.setItem("nf_uncategorized_color", col); } catch {}
+    setColorPickerUncategorized(false);
+  };
   const updateCategoryColor = async (id, color) => {
     await sb.from("categories").update({ color }).eq("id", id);
     setCategories(cats => cats.map(c => c.id === id ? { ...c, color } : c));
@@ -739,6 +760,8 @@ export default function NoteApp() {
       const cat = categories.find(c => c.id === id);
       if (cat?.color) return cat.color;
     }
+    // Uncategorized notes use the user-chosen uncategorized color
+    if ((note.tabs || []).length === 0) return uncategorizedColor;
     return null;
   };
 
@@ -755,8 +778,8 @@ export default function NoteApp() {
     content: { flex: 1, overflowY: "auto", padding: 20 },
     grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 13 },
     listWrap: { display: "flex", flexDirection: "column", gap: 8 },
-    card: (pri, dragging, dragOver, catColor, selected, insertBefore, insertAfter) => ({ background: catColor ? catColor + "18" : c.card, border: `2px solid ${selected ? (catColor || c.accent) : pri ? c.accent + "55" : catColor ? catColor + "44" : c.border}`, borderRadius: 13, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 9, opacity: dragging ? 0.15 : 1, cursor: "grab", transition: "border-color 0.12s, opacity 0.12s, box-shadow 0.15s", boxShadow: selected ? `0 0 0 3px ${(catColor || c.accent)}44` : insertBefore ? `0 -4px 0 0 ${c.accent}, 0 0 8px ${c.accent}66` : insertAfter ? `0 4px 0 0 ${c.accent}, 0 0 8px ${c.accent}66` : "none" }),
-    listCard: (pri, dragging, dragOver, catColor, selected, insertBefore, insertAfter) => ({ background: catColor ? catColor + "18" : c.card, border: `2px solid ${selected ? (catColor || c.accent) : pri ? c.accent + "44" : catColor ? catColor + "44" : c.border}`, borderRadius: 10, padding: "11px 16px", display: "flex", alignItems: "flex-start", gap: 10, opacity: dragging ? 0.15 : 1, cursor: "grab", transition: "border-color 0.12s, box-shadow 0.15s", boxShadow: selected ? `0 0 0 3px ${(catColor || c.accent)}44` : insertBefore ? `0 -4px 0 0 ${c.accent}, 0 0 8px ${c.accent}66` : insertAfter ? `0 4px 0 0 ${c.accent}, 0 0 8px ${c.accent}66` : "none" }),
+    card: (pri, dragging, dragOver, catColor, selected, insertBefore, insertAfter) => ({ background: catColor ? catColor + "18" : c.card, border: `2px solid ${selected ? (catColor || c.accent) : pri ? c.accent + "55" : catColor ? catColor + "44" : "#4a448066"}`, borderRadius: 13, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 9, opacity: dragging ? 0.15 : 1, cursor: "grab", transition: "border-color 0.12s, opacity 0.12s, box-shadow 0.15s", boxShadow: selected ? `0 0 0 3px ${(catColor || c.accent)}44` : insertBefore ? `0 -4px 0 0 ${c.accent}, 0 0 8px ${c.accent}66` : insertAfter ? `0 4px 0 0 ${c.accent}, 0 0 8px ${c.accent}66` : "none" }),
+    listCard: (pri, dragging, dragOver, catColor, selected, insertBefore, insertAfter) => ({ background: catColor ? catColor + "18" : c.card, border: `2px solid ${selected ? (catColor || c.accent) : pri ? c.accent + "44" : catColor ? catColor + "44" : "#4a448066"}`, borderRadius: 10, padding: "11px 16px", display: "flex", alignItems: "flex-start", gap: 10, opacity: dragging ? 0.15 : 1, cursor: "grab", transition: "border-color 0.12s, box-shadow 0.15s", boxShadow: selected ? `0 0 0 3px ${(catColor || c.accent)}44` : insertBefore ? `0 -4px 0 0 ${c.accent}, 0 0 8px ${c.accent}66` : insertAfter ? `0 4px 0 0 ${c.accent}, 0 0 8px ${c.accent}66` : "none" }),
     modal: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 },
     mbox: { background: c.card, border: `1px solid ${c.border}`, borderRadius: 18, padding: 24, width: "100%", maxWidth: 540, maxHeight: "90vh", overflowY: "auto" },
     inp: { width: "100%", background: c.input, border: `1px solid ${c.inputBorder}`, borderRadius: 9, padding: "9px 12px", color: c.text, fontSize: 13.5, outline: "none", boxSizing: "border-box" },
@@ -840,6 +863,13 @@ export default function NoteApp() {
                       style={{ width: 10, height: 10, borderRadius: "50%", background: t.color || c.muted, flexShrink: 0, cursor: "pointer", border: `1.5px solid ${t.color ? "transparent" : c.border}`, display: "inline-block" }}
                     />
                   )}
+                  {t.id === "uncategorized" && (
+                    <span
+                      onClick={e => { e.stopPropagation(); setColorPickerUncategorized(v => !v); }}
+                      title="Change uncategorized color"
+                      style={{ width: 10, height: 10, borderRadius: "50%", background: uncategorizedColor, flexShrink: 0, cursor: "pointer", border: "1.5px solid transparent", display: "inline-block" }}
+                    />
+                  )}
                   <span style={{ flex: 1 }}>{t.label}</span>
                   {dragOverCategoryId === t.id && <span style={{ fontSize: 11, color: t.color || c.accent, fontWeight: 700, marginRight: 2 }}>+ Assign</span>}
                   <span style={{ ...s.badge(t.color || undefined) }}>{countForTab(t.id)}</span>
@@ -857,6 +887,14 @@ export default function NoteApp() {
                       style={{ width: 18, height: 18, borderRadius: "50%", background: col, cursor: "pointer", border: t.color === col ? `2px solid ${c.text}` : "2px solid transparent", flexShrink: 0 }} />
                   ))}
                   {t.color && <span onClick={() => updateCategoryColor(t.id, null)} style={{ fontSize: 11, color: c.muted, cursor: "pointer", alignSelf: "center" }}>reset</span>}
+                </div>
+              )}
+              {t.id === "uncategorized" && colorPickerUncategorized && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 16px 10px", background: c.card, borderBottom: `1px solid ${c.border}` }}>
+                  {CAT_COLORS.map(col => (
+                    <span key={col} onClick={() => saveUncategorizedColor(col)}
+                      style={{ width: 18, height: 18, borderRadius: "50%", background: col, cursor: "pointer", border: uncategorizedColor === col ? `2px solid ${c.text}` : "2px solid transparent", flexShrink: 0 }} />
+                  ))}
                 </div>
               )}
             </div>
@@ -1528,15 +1566,17 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
     onEdit();
   };
 
-  // CHANGE 2: bigger solid-red trash icon SVG component for cards
-  const TrashIcon = ({ size = 18 }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="#ef4444" stroke="#ef4444" strokeWidth={1} strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="3 6 5 6 21 6" />
-      <path d="M8 6V4h8v2" />
-      <rect x="5" y="7" width="14" height="13" rx="1.5" fill="#ef4444" />
-      <line x1="10" y1="11" x2="10" y2="17" stroke="white" strokeWidth="1.5" />
-      <line x1="14" y1="11" x2="14" y2="17" stroke="white" strokeWidth="1.5" />
-    </svg>
+  const [trashHover, setTrashHover] = useState(false);
+  const TrashBtn = ({ onClick, title: ttl }) => (
+    <button
+      style={{ ...s.iconBtn(trashHover ? c.danger : c.muted), marginLeft: "auto", padding: 4, transition: "color 0.15s" }}
+      title={ttl}
+      onMouseEnter={() => setTrashHover(true)}
+      onMouseLeave={() => setTrashHover(false)}
+      onClick={onClick}
+    >
+      <Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" size={18} />
+    </button>
   );
 
   return (
@@ -1622,23 +1662,15 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
       <div style={{ display: "flex", gap: 2, paddingTop: 8, borderTop: `1px solid ${c.border}`, alignItems: "center" }}>
         {view === "trash" ? (<>
           <button style={s.iconBtn(c.success)} title="Restore" onClick={e => { e.stopPropagation(); onRestore(); }}><Ico d="M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" /></button>
-          {/* CHANGE 2: solid red trash icon, bigger */}
-          <button style={{ ...s.iconBtn(c.danger), padding: 4 }} title="Delete forever" onClick={e => { e.stopPropagation(); onDelete(); }}>
-            <TrashIcon size={18} />
-          </button>
+          <TrashBtn title="Delete forever" onClick={e => { e.stopPropagation(); onDelete(); }} />
         </>) : view === "completed" ? (<>
           <button style={s.iconBtn(c.success)} title="Restore" onClick={e => { e.stopPropagation(); onRestore(); }}><Ico d="M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" /></button>
-          <button style={{ ...s.iconBtn(c.danger), padding: 4 }} title="Move to trash" onClick={e => { e.stopPropagation(); onTrash(); }}>
-            <TrashIcon size={18} />
-          </button>
+          <TrashBtn title="Move to trash" onClick={e => { e.stopPropagation(); onTrash(); }} />
         </>) : (<>
           <button style={s.iconBtn()} title="Edit" onClick={e => { e.stopPropagation(); onEdit(); }}><Ico d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></button>
           <button style={s.iconBtn()} title="Share" onClick={e => { e.stopPropagation(); onShare(); }}><Ico d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13" /></button>
           <button style={s.iconBtn()} title="History" onClick={e => { e.stopPropagation(); onHistory(); }}><Ico d="M12 8v4l3 3M3.05 11a9 9 0 1017.9 0" /></button>
-          {/* CHANGE 2: solid red trash icon, bigger, marginLeft auto pushes to right */}
-          <button style={{ ...s.iconBtn(c.danger), marginLeft: "auto", padding: 4 }} title="Trash" onClick={e => { e.stopPropagation(); onTrash(); }}>
-            <TrashIcon size={18} />
-          </button>
+          <TrashBtn title="Trash" onClick={e => { e.stopPropagation(); onTrash(); }} />
         </>)}
       </div>
     </div>
@@ -1649,18 +1681,19 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
 function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, fileIcon, onEdit, onTrash, onDelete, onToggleComplete, onTogglePriority, onShare, onHistory, onRestore, onInlineSave, catColor, selected, onSelect, insertBefore, insertAfter, multiSelected, onMultiSelect, onContextMenu }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(note.title);
+  const [rowTrashHover, setRowTrashHover] = useState(false);
   const clickTimer = useRef(null);
   const noteTabs = (note.tabs || []).map(id => tabs.find(t => t.id === id)).filter(Boolean);
 
-  // CHANGE 2: solid red trash icon for list rows too
-  const TrashIcon = ({ size = 18 }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="#ef4444" stroke="#ef4444" strokeWidth={1} strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="3 6 5 6 21 6" />
-      <path d="M8 6V4h8v2" />
-      <rect x="5" y="7" width="14" height="13" rx="1.5" fill="#ef4444" />
-      <line x1="10" y1="11" x2="10" y2="17" stroke="white" strokeWidth="1.5" />
-      <line x1="14" y1="11" x2="14" y2="17" stroke="white" strokeWidth="1.5" />
-    </svg>
+  const RowTrashBtn = ({ onClick: oc }) => (
+    <button
+      style={{ ...s.iconBtn(rowTrashHover ? c.danger : c.muted), padding: 4, transition: "color 0.15s" }}
+      onMouseEnter={() => setRowTrashHover(true)}
+      onMouseLeave={() => setRowTrashHover(false)}
+      onClick={oc}
+    >
+      <Ico d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" size={18} />
+    </button>
   );
 
   const commitTitle = () => {
@@ -1725,15 +1758,15 @@ function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragSta
 
         {view === "trash" ? (<>
           <button style={s.iconBtn(c.success)} onClick={e => { e.stopPropagation(); onRestore(); }}><Ico d="M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" /></button>
-          <button style={{ ...s.iconBtn(c.danger), padding: 4 }} onClick={e => { e.stopPropagation(); onDelete(); }}><TrashIcon size={18} /></button>
+          <RowTrashBtn onClick={e => { e.stopPropagation(); onDelete(); }} />
         </>) : view === "completed" ? (<>
           <button style={s.iconBtn(c.success)} onClick={e => { e.stopPropagation(); onRestore(); }}><Ico d="M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" /></button>
-          <button style={{ ...s.iconBtn(c.danger), padding: 4 }} onClick={e => { e.stopPropagation(); onTrash(); }}><TrashIcon size={18} /></button>
+          <RowTrashBtn onClick={e => { e.stopPropagation(); onTrash(); }} />
         </>) : (<>
           <button style={s.iconBtn()} onClick={e => { e.stopPropagation(); onEdit(); }}><Ico d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></button>
           <button style={s.iconBtn()} onClick={e => { e.stopPropagation(); onShare(); }}><Ico d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13" /></button>
           <button style={s.iconBtn()} onClick={e => { e.stopPropagation(); onHistory(); }}><Ico d="M12 8v4l3 3M3.05 11a9 9 0 1017.9 0" /></button>
-          <button style={{ ...s.iconBtn(c.danger), padding: 4 }} onClick={e => { e.stopPropagation(); onTrash(); }}><TrashIcon size={18} /></button>
+          <RowTrashBtn onClick={e => { e.stopPropagation(); onTrash(); }} />
         </>)}
       </div>
     </div>

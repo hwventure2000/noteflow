@@ -1387,6 +1387,7 @@ export default function NoteApp() {
           ))}
           {folderContextMenu.category && [
             { label: "✏️ Rename", action: () => { setEditingCategoryId(folderContextMenu.category.id); setEditingCategoryName(folderContextMenu.category.label); setFolderContextMenu(null); } },
+            { label: "📝 New Note here", action: () => { setActiveFolderId(folderContextMenu.folder.id); setActiveCategoryId(folderContextMenu.category.id); setView("all"); setForm({ title: "", body: "", priority: false, tabs: [], folderId: folderContextMenu.folder.id, categoryId: folderContextMenu.category.id, attachments: [], reminder: "" }); setNoteModal("new"); setFolderContextMenu(null); } },
             { label: "🗑 Delete", action: () => { deleteFolderCategory(folderContextMenu.category.id); setFolderContextMenu(null); }, danger: true },
           ].map((item, i) => (
             <div key={i} onClick={item.action} style={{ padding: "9px 16px", fontSize: 13.5, cursor: "pointer", color: item.danger ? c.danger : c.text, transition: "background 0.1s" }}

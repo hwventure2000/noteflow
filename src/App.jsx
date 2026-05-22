@@ -950,8 +950,8 @@ export default function NoteApp() {
           </div>
 
           {/* Folders */}
-          {folders.map(folder => {
-            const folderCats = categories.filter(cat => cat.folder_id === folder.id);
+          {[...folders].sort((a, b) => a.label.localeCompare(b.label)).map(folder => {
+            const folderCats = [...categories.filter(cat => cat.folder_id === folder.id)].sort((a, b) => a.label.localeCompare(b.label));
             const isCollapsed = collapsedFolders.has(folder.id);
             const isFolderActive = activeFolderId === folder.id && !activeCategoryId && view === "all";
             const folderRowStyle = { display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", margin: isFolderActive ? "2px 8px" : "2px 0", borderRadius: isFolderActive ? 10 : 0, background: isFolderActive ? (folder.color ? folder.color + "22" : c.accentSoft) : "transparent", color: isFolderActive ? (folder.color || c.accent) : c.text, fontWeight: isFolderActive ? 600 : 500, fontSize: 14, cursor: "pointer", userSelect: "none", transition: "all 0.15s" };
@@ -1042,7 +1042,7 @@ export default function NoteApp() {
           )}
 
           {/* Standalone categories (no folder) */}
-          {categories.filter(cat => !cat.folder_id).map(cat => {
+          {[...categories].filter(cat => !cat.folder_id).sort((a, b) => a.label.localeCompare(b.label)).map(cat => {
             const isCatActive = activeCategoryId === cat.id && !activeFolderId && view === "all";
             return (
               <div key={cat.id}>

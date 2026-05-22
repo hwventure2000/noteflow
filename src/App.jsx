@@ -75,6 +75,19 @@ function playChime() {
 
 let _dragNoteId = null;
 
+// ── Color Picker ──────────────────────────────────────────────────────────────
+function ColorPicker({ current, onSelect, onReset, c }) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 12px 10px", background: c.card, borderBottom: `1px solid ${c.border}` }}>
+      {CAT_COLORS.map(col => (
+        <span key={col} onClick={() => onSelect(col)}
+          style={{ width: 18, height: 18, borderRadius: "50%", background: col, cursor: "pointer", border: current === col ? `2px solid ${c.text}` : "2px solid transparent", flexShrink: 0 }} />
+      ))}
+      {onReset && current && <span onClick={onReset} style={{ fontSize: 11, color: c.muted, cursor: "pointer", alignSelf: "center" }}>reset</span>}
+    </div>
+  );
+}
+
 function AuthScreen({ c, s }) {
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
@@ -218,9 +231,15 @@ export default function NoteApp() {
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
+  const [folders, setFolders] = useState([]);
   const [categories, setCategories] = useState([]);
   const [notes, setNotes] = useState([]);
   const [activeTab, setActiveTab] = useState("all");
+  const [activeFolderId, setActiveFolderId] = useState(null); // null=All, "uncategorized", or folder uuid
+  const [activeCategoryId, setActiveCategoryId] = useState(null);
+  const [collapsedFolders, setCollapsedFolders] = useState(new Set());
+  const [folderContextMenu, setFolderContextMenu] = useState(null);
+  const [colorPickerTarget, setColorPickerTarget] = useState(null); // {type:"folder"|"category"|"uncategorized", id?}
   const [search, setSearch] = useState("");
   const [view, setView] = useState("all");
   const [sortOrder, setSortOrder] = useState("newToOld");
@@ -276,7 +295,12 @@ export default function NoteApp() {
     return () => subscription.unsubscribe();
   }, []);
 
-  useEffect(() => { if (session) { loadCategories(); loadNotes(); } }, [session]);
+  useEffect(() => { if (session) { loadFolders(); loadCategories(); loadNotes(); } }, [session]);
+
+  const loadFolders = async () => {
+    const { data } = await sb.from("folders").select("*").order("position");
+    if (data) setFolders(data);
+  };
 
   // Auto-expire trash after 30 days
   useEffect(() => {
@@ -297,13 +321,13 @@ export default function NoteApp() {
         e.preventDefault();
         if (session && view === "all") openNew();
       }
-      if (e.key === "Escape") { setContextMenu(null); setMultiSelectedIds(new Set()); }
+      if (e.key === "Escape") { setContextMenu(null); setFolderContextMenu(null); setColorPickerTarget(null); setMultiSelectedIds(new Set()); }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [session, view, activeTab]);
 
-  const signOut = async () => { await sb.auth.signOut(); setNotes([]); setCategories([]); };
+  const signOut = async () => { await sb.auth.signOut(); setNotes([]); setCategories([]); setFolders([]); };
 
   const loadCategories = async () => {
     const { data } = await sb.from("categories").select("*").order("position");
@@ -330,6 +354,70 @@ export default function NoteApp() {
       })));
     }
     setDbLoading(false);
+  };
+
+  // ── Folder CRUD ──
+  const [addFolderModal, setAddFolderModal] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [editingFolderId, setEditingFolderId] = useState(null);
+  const [editingFolderName, setEditingFolderName] = useState("");
+  const [addCategoryModal, setAddCategoryModal] = useState(null); // folderId or null
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [editingCategoryId, setEditingCategoryId] = useState(null);
+  const [editingCategoryName, setEditingCategoryName] = useState("");
+
+  const addFolder = async () => {
+    if (!newFolderName.trim()) return;
+    const { data } = await sb.from("folders").insert({ label: newFolderName.trim(), position: folders.length, user_id: session.user.id, color: "#7c6af7" }).select().single();
+    if (data) setFolders(fs => [...fs, data]);
+    setNewFolderName(""); setAddFolderModal(false);
+  };
+  const renameFolder = async () => {
+    if (!editingFolderName.trim()) return;
+    await sb.from("folders").update({ label: editingFolderName.trim() }).eq("id", editingFolderId);
+    setFolders(fs => fs.map(f => f.id === editingFolderId ? { ...f, label: editingFolderName.trim() } : f));
+    setEditingFolderId(null);
+  };
+  const deleteFolder = async (id) => {
+    if (!window.confirm("Delete this folder? Notes inside will become uncategorized.")) return;
+    await sb.from("folders").delete().eq("id", id);
+    setFolders(fs => fs.filter(f => f.id !== id));
+    setCategories(cs => cs.map(cat => cat.folder_id === id ? { ...cat, folder_id: null } : cat));
+    setNotes(ns => ns.map(n => n.folder_id === id ? { ...n, folder_id: null, category_id: null } : n));
+    if (activeFolderId === id) { setActiveFolderId(null); setActiveCategoryId(null); }
+  };
+  const updateFolderColor = async (id, color) => {
+    await sb.from("folders").update({ color }).eq("id", id);
+    setFolders(fs => fs.map(f => f.id === id ? { ...f, color } : f));
+    setColorPickerTarget(null);
+  };
+  const toggleFolderCollapsed = (id) => {
+    setCollapsedFolders(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+  };
+
+  // ── Category CRUD (folder-scoped) ──
+  const addFolderCategory = async (folderId) => {
+    if (!newCategoryName.trim()) return;
+    const folderCats = categories.filter(cat => cat.folder_id === folderId);
+    const { data } = await sb.from("categories").insert({ label: newCategoryName.trim(), position: folderCats.length, folder_id: folderId || null, user_id: session.user.id, color: "#7c6af7" }).select().single();
+    if (data) setCategories(cs => [...cs, data]);
+    setNewCategoryName(""); setAddCategoryModal(null);
+  };
+  const renameFolderCategory = async () => {
+    if (!editingCategoryName.trim()) return;
+    await sb.from("categories").update({ label: editingCategoryName.trim() }).eq("id", editingCategoryId);
+    setCategories(cs => cs.map(cat => cat.id === editingCategoryId ? { ...cat, label: editingCategoryName.trim() } : cat));
+    setEditingCategoryId(null);
+  };
+  const deleteFolderCategory = async (id) => {
+    await sb.from("categories").delete().eq("id", id);
+    setCategories(cs => cs.filter(cat => cat.id !== id));
+    if (activeCategoryId === id) setActiveCategoryId(null);
+  };
+  const updateFolderCategoryColor = async (id, color) => {
+    await sb.from("categories").update({ color }).eq("id", id);
+    setCategories(cs => cs.map(cat => cat.id === id ? { ...cat, color } : cat));
+    setColorPickerTarget(null);
   };
 
   const addTab = async (fromNote = false) => {
@@ -429,11 +517,11 @@ export default function NoteApp() {
   const tabs = [...FIXED_TABS.filter(t => t.id === "all"), ...categories, ...FIXED_TABS.filter(t => t.id === "uncategorized")];
 
   const openNew = () => {
-    setForm({ title: "", body: "", priority: false, tabs: activeTab === "all" || activeTab === "uncategorized" ? [] : [activeTab], attachments: [], reminder: "" });
+    setForm({ title: "", body: "", priority: false, tabs: activeTab === "all" || activeTab === "uncategorized" ? [] : [activeTab], folderId: activeFolderId && activeFolderId !== "uncategorized" ? activeFolderId : null, categoryId: activeCategoryId, attachments: [], reminder: "" });
     setOcrPreview(null); setNoteModal("new");
   };
   const openEdit = (note) => {
-    setForm({ title: note.title, body: note.body, priority: note.priority, tabs: note.tabs, attachments: note.attachments, reminder: note.reminder ? new Date(note.reminder).toISOString().slice(0, 16) : "" });
+    setForm({ title: note.title, body: note.body, priority: note.priority, tabs: note.tabs, folderId: note.folder_id || null, categoryId: note.category_id || null, attachments: note.attachments, reminder: note.reminder ? new Date(note.reminder).toISOString().slice(0, 16) : "" });
     setOcrPreview(null); setNoteModal(note);
   };
 
@@ -442,6 +530,8 @@ export default function NoteApp() {
     const payload = {
       title: form.title, body: form.body, priority: form.priority,
       tabs: form.tabs, reminder: form.reminder || null,
+      folder_id: form.folderId || null,
+      category_id: form.categoryId || null,
       user_id: session.user.id,
     };
     if (noteModal === "new") {
@@ -737,12 +827,19 @@ export default function NoteApp() {
     if (view === "trash") return n.trashed;
     if (view === "completed") return n.completed && !n.trashed;
     if (n.completed || n.trashed) return false;
-    if (activeTab === "uncategorized") return n.tabs.length === 0;
-    if (activeTab !== "all" && !n.tabs.includes(activeTab)) return false;
+    // Folder filter
+    if (activeFolderId === "uncategorized") { if (n.folder_id) return false; }
+    else if (activeFolderId) { if (n.folder_id !== activeFolderId) return false; }
+    // Category filter
+    if (activeCategoryId && n.category_id !== activeCategoryId) return false;
+    // Legacy tab filter (for notes not yet migrated)
+    if (!activeFolderId && activeTab !== "all") {
+      if (activeTab === "uncategorized" && n.tabs.length > 0) return false;
+      if (activeTab !== "uncategorized" && !n.tabs.includes(activeTab)) return false;
+    }
     if (search) {
       const q = search.toLowerCase();
-      const noteTabLabels = n.tabs.map(tid => categories.find(cat => cat.id === tid)?.label || "").join(" ").toLowerCase();
-      if (!n.title.toLowerCase().includes(q) && !n.body.toLowerCase().includes(q) && !noteTabLabels.includes(q)) return false;
+      if (!n.title.toLowerCase().includes(q) && !(n.body || "").toLowerCase().includes(q)) return false;
     }
     return true;
   });
@@ -756,13 +853,20 @@ export default function NoteApp() {
   const fileIcon = (type) => type?.startsWith("image/") ? "🖼️" : type === "application/pdf" ? "📄" : type?.includes("word") || type?.includes("doc") ? "📝" : "📎";
 
   const getNoteColor = (note) => {
+    if (note.category_id) {
+      const cat = categories.find(c => c.id === note.category_id);
+      if (cat?.color) return cat.color;
+    }
+    if (note.folder_id) {
+      const folder = folders.find(f => f.id === note.folder_id);
+      if (folder?.color) return folder.color;
+    }
+    // legacy tabs fallback
     for (const id of (note.tabs || [])) {
       const cat = categories.find(c => c.id === id);
       if (cat?.color) return cat.color;
     }
-    // Uncategorized notes use the user-chosen uncategorized color
-    if ((note.tabs || []).length === 0) return uncategorizedColor;
-    return null;
+    return uncategorizedColor;
   };
 
   const s = {
@@ -823,90 +927,113 @@ export default function NoteApp() {
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", paddingTop: 6 }}>
-          {tabs.map((t) => (
-            <div key={t.id}>
-              {editingTabId === t.id ? (
-                <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px" }}>
-                  <input autoFocus style={{ ...s.inp, padding: "5px 8px", fontSize: 13 }} value={editingTabName}
-                    onChange={e => setEditingTabName(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter") saveTabName(); if (e.key === "Escape") setEditingTabId(null); }}
-                    onBlur={saveTabName} />
-                </div>
-              ) : (
-                <div
-                  draggable={!t.fixed}
-                  onDragStart={t.fixed ? undefined : e => onTabDragStart(e, t.id)}
-                  onDragOver={e => {
-                    if (!t.fixed && !_dragNoteId) onTabDragOver(e, t.id);
-                    if (!t.fixed) onCategoryDragOver(e, t.id);
-                    if (_dragNoteId && !t.fixed) e.preventDefault();
-                  }}
-                  onDragLeave={onCategoryDragLeave}
-                  onDrop={e => {
-                    if (_dragNoteId && !t.fixed) { onCategoryDrop(e, t.id); }
-                    else if (!t.fixed && !_dragNoteId) { onTabDrop(e, t.id); }
-                  }}
-                  onDragEnd={() => { setDragTabId(null); setDragOverTabId(null); setDragOverCategoryId(null); }}
-                  style={{
-                    ...s.tabRow(view === "all" && activeTab === t.id, (dragOverTabId === t.id && dragTabId !== t.id) || dragOverCategoryId === t.id, t.color),
-                    cursor: t.fixed ? "pointer" : "grab",
-                  }}
-                  onClick={() => { setActiveTab(t.id); setView("all"); }}
-                  onDoubleClick={t.fixed ? undefined : e => { e.stopPropagation(); setEditingTabId(t.id); setEditingTabName(t.label); }}
-                  title={t.fixed ? "" : "Drop a note here · Double-click to rename"}
-                >
-                  {!t.fixed && <span style={{ color: dragOverCategoryId === t.id ? (t.color || c.accent) : c.muted, fontSize: 13, cursor: "grab" }}>⠿</span>}
-                  {!t.fixed && (
-                    <span
-                      onClick={e => { e.stopPropagation(); setColorPickerTabId(colorPickerTabId === t.id ? null : t.id); }}
-                      title="Change color"
-                      style={{ width: 10, height: 10, borderRadius: "50%", background: t.color || c.muted, flexShrink: 0, cursor: "pointer", border: `1.5px solid ${t.color ? "transparent" : c.border}`, display: "inline-block" }}
-                    />
-                  )}
-                  {t.id === "uncategorized" && (
-                    <span
-                      onClick={e => { e.stopPropagation(); setColorPickerUncategorized(v => !v); }}
-                      title="Change uncategorized color"
-                      style={{ width: 10, height: 10, borderRadius: "50%", background: uncategorizedColor, flexShrink: 0, cursor: "pointer", border: "1.5px solid transparent", display: "inline-block" }}
-                    />
-                  )}
-                  <span style={{ flex: 1 }}>{t.label}</span>
-                  {dragOverCategoryId === t.id && <span style={{ fontSize: 11, color: t.color || c.accent, fontWeight: 700, marginRight: 2 }}>+ Assign</span>}
-                  <span style={{ ...s.badge(t.color || undefined) }}>{countForTab(t.id)}</span>
-                  {!t.fixed && (
-                    <span style={{ marginLeft: 4 }}>
-                      <span style={{ ...s.iconBtn(c.danger), padding: 2, fontSize: 11 }} onClick={e => { e.stopPropagation(); removeTab(t.id); }}>✕</span>
-                    </span>
-                  )}
-                </div>
-              )}
-              {colorPickerTabId === t.id && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 16px 10px", background: c.card, borderBottom: `1px solid ${c.border}` }}>
-                  {CAT_COLORS.map(col => (
-                    <span key={col} onClick={() => updateCategoryColor(t.id, col)}
-                      style={{ width: 18, height: 18, borderRadius: "50%", background: col, cursor: "pointer", border: t.color === col ? `2px solid ${c.text}` : "2px solid transparent", flexShrink: 0 }} />
-                  ))}
-                  {t.color && <span onClick={() => updateCategoryColor(t.id, null)} style={{ fontSize: 11, color: c.muted, cursor: "pointer", alignSelf: "center" }}>reset</span>}
-                </div>
-              )}
-              {t.id === "uncategorized" && colorPickerUncategorized && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 16px 10px", background: c.card, borderBottom: `1px solid ${c.border}` }}>
-                  {CAT_COLORS.map(col => (
-                    <span key={col} onClick={() => saveUncategorizedColor(col)}
-                      style={{ width: 18, height: 18, borderRadius: "50%", background: col, cursor: "pointer", border: uncategorizedColor === col ? `2px solid ${c.text}` : "2px solid transparent", flexShrink: 0 }} />
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-          <div style={{ ...s.tabRow(false, false, undefined), cursor: "pointer", color: c.accent, opacity: 0.8 }} onClick={() => setAddTabModal(true)}>+ Add category</div>
-          <div style={s.div} />
-          <div style={{ ...s.tabRow(view === "completed", false, undefined), cursor: "pointer" }} onClick={() => setView("completed")}>
-            <span style={{ flex: 1 }}>🗂 Completed</span>
+
+          {/* All Notes */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", margin: (!activeFolderId && view === "all") ? "2px 8px" : "2px 0", borderRadius: (!activeFolderId && view === "all") ? 10 : 0, background: (!activeFolderId && view === "all") ? c.accentSoft : "transparent", color: (!activeFolderId && view === "all") ? c.accent : c.text, fontWeight: (!activeFolderId && view === "all") ? 600 : 500, fontSize: 14, cursor: "pointer", userSelect: "none", transition: "all 0.15s" }}
+            onClick={() => { setActiveFolderId(null); setActiveCategoryId(null); setView("all"); }}>
+            <span style={{ fontSize: 13 }}>📋</span>
+            <span style={{ flex: 1 }}>All Notes</span>
+            <span style={s.badge(c.accent)}>{notes.filter(n => !n.completed && !n.trashed).length}</span>
+          </div>
+
+          {/* Folders */}
+          {folders.map(folder => {
+            const folderCats = categories.filter(cat => cat.folder_id === folder.id);
+            const isCollapsed = collapsedFolders.has(folder.id);
+            const isFolderActive = activeFolderId === folder.id && !activeCategoryId && view === "all";
+            const folderRowStyle = { display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", margin: isFolderActive ? "2px 8px" : "2px 0", borderRadius: isFolderActive ? 10 : 0, background: isFolderActive ? (folder.color ? folder.color + "22" : c.accentSoft) : "transparent", color: isFolderActive ? (folder.color || c.accent) : c.text, fontWeight: isFolderActive ? 600 : 500, fontSize: 14, cursor: "pointer", userSelect: "none", transition: "all 0.15s" };
+            const catRowStyle = (active, color) => ({ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px 6px 30px", margin: active ? "1px 8px" : "0", borderRadius: active ? 8 : 0, background: active ? (color ? color + "22" : c.accentSoft) : "transparent", color: active ? (color || c.accent) : c.muted, fontWeight: active ? 600 : 400, fontSize: 13, cursor: "pointer", userSelect: "none", transition: "all 0.15s" });
+            return (
+              <div key={folder.id}>
+                {editingFolderId === folder.id ? (
+                  <div style={{ padding: "4px 10px" }}>
+                    <input autoFocus style={{ ...s.inp, padding: "5px 8px", fontSize: 13 }} value={editingFolderName}
+                      onChange={e => setEditingFolderName(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") renameFolder(); if (e.key === "Escape") setEditingFolderId(null); }}
+                      onBlur={renameFolder} />
+                  </div>
+                ) : (
+                  <div style={folderRowStyle}
+                    onClick={() => { setActiveFolderId(folder.id); setActiveCategoryId(null); setView("all"); }}
+                    onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setFolderContextMenu({ x: e.clientX, y: e.clientY, folder }); }}>
+                    <span onClick={e => { e.stopPropagation(); toggleFolderCollapsed(folder.id); }}
+                      style={{ fontSize: 10, color: c.muted, cursor: "pointer", display: "inline-block", transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)", transition: "transform 0.15s" }}>▼</span>
+                    <span onClick={e => { e.stopPropagation(); setColorPickerTarget(colorPickerTarget?.id === folder.id ? null : { type: "folder", id: folder.id }); }}
+                      style={{ width: 10, height: 10, borderRadius: "50%", background: folder.color || c.muted, flexShrink: 0, cursor: "pointer", display: "inline-block" }} />
+                    <span style={{ flex: 1 }}>{folder.label}</span>
+                    <span style={s.badge(folder.color || c.muted)}>{notes.filter(n => !n.completed && !n.trashed && n.folder_id === folder.id).length}</span>
+                  </div>
+                )}
+                {colorPickerTarget?.type === "folder" && colorPickerTarget?.id === folder.id && (
+                  <ColorPicker current={folder.color} onSelect={col => updateFolderColor(folder.id, col)} onReset={() => updateFolderColor(folder.id, null)} c={c} />
+                )}
+                {!isCollapsed && folderCats.map(cat => {
+                  const isCatActive = activeCategoryId === cat.id && view === "all";
+                  return (
+                    <div key={cat.id}>
+                      {editingCategoryId === cat.id ? (
+                        <div style={{ padding: "3px 10px 3px 28px" }}>
+                          <input autoFocus style={{ ...s.inp, padding: "4px 8px", fontSize: 12 }} value={editingCategoryName}
+                            onChange={e => setEditingCategoryName(e.target.value)}
+                            onKeyDown={e => { if (e.key === "Enter") renameFolderCategory(); if (e.key === "Escape") setEditingCategoryId(null); }}
+                            onBlur={renameFolderCategory} />
+                        </div>
+                      ) : (
+                        <div style={catRowStyle(isCatActive, cat.color)}
+                          onClick={() => { setActiveFolderId(folder.id); setActiveCategoryId(cat.id); setView("all"); }}
+                          onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setFolderContextMenu({ x: e.clientX, y: e.clientY, category: cat, folder }); }}>
+                          <span onClick={e => { e.stopPropagation(); setColorPickerTarget(colorPickerTarget?.id === cat.id ? null : { type: "category", id: cat.id }); }}
+                            style={{ width: 8, height: 8, borderRadius: "50%", background: cat.color || c.muted, flexShrink: 0, cursor: "pointer", display: "inline-block" }} />
+                          <span style={{ flex: 1 }}>{cat.label}</span>
+                          <span style={s.badge(cat.color || c.muted)}>{notes.filter(n => !n.completed && !n.trashed && n.category_id === cat.id).length}</span>
+                        </div>
+                      )}
+                      {colorPickerTarget?.type === "category" && colorPickerTarget?.id === cat.id && (
+                        <ColorPicker current={cat.color} onSelect={col => updateFolderCategoryColor(cat.id, col)} onReset={() => updateFolderCategoryColor(cat.id, null)} c={c} />
+                      )}
+                    </div>
+                  );
+                })}
+                {!isCollapsed && (
+                  <div style={{ ...catRowStyle(false, null), color: c.accent, opacity: 0.7 }}
+                    onClick={() => { setAddCategoryModal(folder.id); setNewCategoryName(""); }}>
+                    + Add category
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Add folder */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", color: c.accent, opacity: 0.8, cursor: "pointer", fontSize: 14 }}
+            onClick={() => setAddFolderModal(true)}>
+            <span>＋</span><span>Add folder</span>
+          </div>
+
+          <div style={{ height: 1, background: c.border, margin: "6px 12px" }} />
+
+          {/* Uncategorized */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", margin: (activeFolderId === "uncategorized" && view === "all") ? "2px 8px" : "2px 0", borderRadius: (activeFolderId === "uncategorized" && view === "all") ? 10 : 0, background: (activeFolderId === "uncategorized" && view === "all") ? uncategorizedColor + "22" : "transparent", color: (activeFolderId === "uncategorized" && view === "all") ? uncategorizedColor : c.text, fontWeight: (activeFolderId === "uncategorized" && view === "all") ? 600 : 500, fontSize: 14, cursor: "pointer", userSelect: "none", transition: "all 0.15s" }}
+            onClick={() => { setActiveFolderId("uncategorized"); setActiveCategoryId(null); setView("all"); }}>
+            <span onClick={e => { e.stopPropagation(); setColorPickerTarget(colorPickerTarget?.type === "uncategorized" ? null : { type: "uncategorized" }); }}
+              style={{ width: 10, height: 10, borderRadius: "50%", background: uncategorizedColor, flexShrink: 0, cursor: "pointer", display: "inline-block" }} />
+            <span style={{ flex: 1 }}>Uncategorized</span>
+            <span style={s.badge(uncategorizedColor)}>{notes.filter(n => !n.completed && !n.trashed && !n.folder_id).length}</span>
+          </div>
+          {colorPickerTarget?.type === "uncategorized" && (
+            <ColorPicker current={uncategorizedColor} onSelect={saveUncategorizedColor} c={c} />
+          )}
+
+          <div style={{ height: 1, background: c.border, margin: "6px 12px" }} />
+
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", margin: view === "completed" ? "2px 8px" : "2px 0", borderRadius: view === "completed" ? 10 : 0, background: view === "completed" ? c.accentSoft : "transparent", color: view === "completed" ? c.accent : c.text, fontWeight: view === "completed" ? 600 : 500, fontSize: 14, cursor: "pointer", userSelect: "none", transition: "all 0.15s" }}
+            onClick={() => setView("completed")}>
+            <span style={{ fontSize: 13 }}>🗂</span><span style={{ flex: 1 }}>Completed</span>
             <span style={s.badge(c.muted)}>{notes.filter(n => n.completed && !n.trashed).length}</span>
           </div>
-          <div style={{ ...s.tabRow(view === "trash", false, undefined), cursor: "pointer" }} onClick={() => setView("trash")}>
-            <span style={{ flex: 1 }}>🗑 Trash</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", margin: view === "trash" ? "2px 8px" : "2px 0", borderRadius: view === "trash" ? 10 : 0, background: view === "trash" ? c.accentSoft : "transparent", color: view === "trash" ? c.accent : c.text, fontWeight: view === "trash" ? 600 : 500, fontSize: 14, cursor: "pointer", userSelect: "none", transition: "all 0.15s" }}
+            onClick={() => setView("trash")}>
+            <span style={{ fontSize: 13 }}>🗑</span><span style={{ flex: 1 }}>Trash</span>
             <span style={s.badge(c.muted)}>{notes.filter(n => n.trashed).length}</span>
           </div>
         </div>
@@ -958,6 +1085,20 @@ export default function NoteApp() {
           {dbLoading && <span style={{ fontSize: 12, color: c.muted }}>Syncing…</span>}
         </div>
 
+        {/* ── breadcrumb ── */}
+        {(activeFolderId && view === "all") && (() => {
+          const folder = folders.find(f => f.id === activeFolderId);
+          const cat = categories.find(cat => cat.id === activeCategoryId);
+          return (
+            <div style={{ padding: "6px 20px", fontSize: 12, color: c.muted, borderBottom: `1px solid ${c.border}`, display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ cursor: "pointer", color: c.accent }} onClick={() => { setActiveFolderId(null); setActiveCategoryId(null); }}>All Notes</span>
+              <span>›</span>
+              <span style={{ color: folder?.color || uncategorizedColor, fontWeight: 500 }}>{folder ? folder.label : "Uncategorized"}</span>
+              {cat && <><span>›</span><span style={{ color: cat.color || c.accent, fontWeight: 500 }}>{cat.label}</span></>}
+            </div>
+          );
+        })()}
+
         {/* ── multi-select action bar ── */}
         {multiSelectedIds.size > 0 && (
           <div style={{ padding: "10px 20px", background: c.accent, display: "flex", alignItems: "center", gap: 12, borderRadius: 12, margin: "8px 16px 0" }}>
@@ -975,7 +1116,7 @@ export default function NoteApp() {
         )}
 
         <div style={s.content}
-          onClick={() => { setContextMenu(null); }}
+          onClick={() => { setContextMenu(null); setFolderContextMenu(null); setColorPickerTarget(null); }}
           onDoubleClick={e => { if (e.target === e.currentTarget && view === "all") openNew(); }}
           onContextMenu={e => { if (e.target === e.currentTarget && view === "all") { e.preventDefault(); openNew(); } }}
           onDragOver={e => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }}
@@ -1067,11 +1208,12 @@ export default function NoteApp() {
                 <button style={s.iconBtn()} onClick={() => setNoteModal(null)}><Ico d="M18 6L6 18M6 6l12 12" /></button>
               </div>
             </div>
-            <NoteForm form={form} setForm={setForm} s={s} c={c} tabs={tabs} listening={listening}
+            <NoteForm form={form} setForm={setForm} s={s} c={c} tabs={tabs} folders={folders} categories={categories} listening={listening}
               startListening={startListening} ocrLoading={ocrLoading} ocrPreview={ocrPreview}
               fileRef={fileRef} ocrFileRef={ocrFileRef} handleFiles={handleFiles}
               handleOcrFile={handleOcrFile} openCamera={openCamera} dropActive={dropActive} setDropActive={setDropActive}
-              onAddCategory={() => { setAddTabFromNote(true); setAddTabModal(true); }}
+              onAddFolder={() => setAddFolderModal(true)}
+              onAddCategory={(folderId) => { setAddCategoryModal(folderId); setNewCategoryName(""); }}
               onSave={saveNote} />
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 20 }}>
               <button style={s.btn("ghost")} onClick={() => setNoteModal(null)}>Cancel</button>
@@ -1177,7 +1319,7 @@ export default function NoteApp() {
         );
       })()}
 
-      {/* ── add category modal ── */}
+      {/* ── add category modal (legacy) ── */}
       {addTabModal && (
         <div style={{ ...s.modal, zIndex: 300 }} onClick={() => { setAddTabModal(false); setAddTabFromNote(false); setNewTabName(""); }}>
           <div style={{ ...s.mbox, maxWidth: 320 }} onClick={e => e.stopPropagation()}>
@@ -1188,6 +1330,62 @@ export default function NoteApp() {
               <button style={s.btn("primary")} onClick={() => addTab(addTabFromNote)}>Add</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── add folder modal ── */}
+      {addFolderModal && (
+        <div style={{ ...s.modal, zIndex: 300 }} onClick={() => { setAddFolderModal(false); setNewFolderName(""); }}>
+          <div style={{ ...s.mbox, maxWidth: 320 }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 14 }}>📁 New Folder</div>
+            <input style={s.inp} placeholder="e.g. American Ninja Warrior, Survivor…" value={newFolderName} onChange={e => setNewFolderName(e.target.value)} onKeyDown={e => e.key === "Enter" && addFolder()} autoFocus />
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
+              <button style={s.btn("ghost")} onClick={() => { setAddFolderModal(false); setNewFolderName(""); }}>Cancel</button>
+              <button style={s.btn("primary")} onClick={addFolder}>Create Folder</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── add category to folder modal ── */}
+      {addCategoryModal !== null && (
+        <div style={{ ...s.modal, zIndex: 300 }} onClick={() => { setAddCategoryModal(null); setNewCategoryName(""); }}>
+          <div style={{ ...s.mbox, maxWidth: 320 }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Add Category</div>
+            <div style={{ fontSize: 12, color: c.muted, marginBottom: 14 }}>in {folders.find(f => f.id === addCategoryModal)?.label}</div>
+            <input style={s.inp} placeholder="e.g. Legal, Production, Director…" value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} onKeyDown={e => e.key === "Enter" && addFolderCategory(addCategoryModal)} autoFocus />
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
+              <button style={s.btn("ghost")} onClick={() => { setAddCategoryModal(null); setNewCategoryName(""); }}>Cancel</button>
+              <button style={s.btn("primary")} onClick={() => addFolderCategory(addCategoryModal)}>Add</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── folder/category context menu ── */}
+      {folderContextMenu && (
+        <div onClick={e => e.stopPropagation()} style={{ position: "fixed", top: folderContextMenu.y, left: folderContextMenu.x, background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: "4px 0", zIndex: 9999, minWidth: 180, boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
+          {folderContextMenu.folder && !folderContextMenu.category && [
+            { label: "✏️ Rename", action: () => { setEditingFolderId(folderContextMenu.folder.id); setEditingFolderName(folderContextMenu.folder.label); setFolderContextMenu(null); } },
+            { label: "➕ Add Category", action: () => { setAddCategoryModal(folderContextMenu.folder.id); setNewCategoryName(""); setFolderContextMenu(null); } },
+            { label: "🗑 Delete Folder", action: () => { deleteFolder(folderContextMenu.folder.id); setFolderContextMenu(null); }, danger: true },
+          ].map((item, i) => (
+            <div key={i} onClick={item.action} style={{ padding: "9px 16px", fontSize: 13.5, cursor: "pointer", color: item.danger ? c.danger : c.text, transition: "background 0.1s" }}
+              onMouseEnter={e => e.currentTarget.style.background = c.accentSoft}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              {item.label}
+            </div>
+          ))}
+          {folderContextMenu.category && [
+            { label: "✏️ Rename", action: () => { setEditingCategoryId(folderContextMenu.category.id); setEditingCategoryName(folderContextMenu.category.label); setFolderContextMenu(null); } },
+            { label: "🗑 Delete", action: () => { deleteFolderCategory(folderContextMenu.category.id); setFolderContextMenu(null); }, danger: true },
+          ].map((item, i) => (
+            <div key={i} onClick={item.action} style={{ padding: "9px 16px", fontSize: 13.5, cursor: "pointer", color: item.danger ? c.danger : c.text, transition: "background 0.1s" }}
+              onMouseEnter={e => e.currentTarget.style.background = c.accentSoft}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              {item.label}
+            </div>
+          ))}
         </div>
       )}
 
@@ -1296,7 +1494,7 @@ function ReminderBanner({ alert, c, onDismiss, onSnooze, onOpen }) {
   );
 }
 
-function NoteForm({ form, setForm, s, c, tabs, listening, startListening, ocrLoading, ocrPreview, fileRef, ocrFileRef, handleFiles, handleOcrFile, openCamera, dropActive, setDropActive, onAddCategory, onSave }) {
+function NoteForm({ form, setForm, s, c, tabs, folders, categories, listening, startListening, ocrLoading, ocrPreview, fileRef, ocrFileRef, handleFiles, handleOcrFile, openCamera, dropActive, setDropActive, onAddCategory, onAddFolder, onSave }) {
   const [uploadHover, setUploadHover] = useState(false);
   const [cameraHover, setCameraHover] = useState(false);
   return (
@@ -1334,26 +1532,37 @@ function NoteForm({ form, setForm, s, c, tabs, listening, startListening, ocrLoa
         {ocrLoading && <div style={{ marginTop: 10, fontSize: 13, color: c.accent }}>🤖 AI is reading your image…</div>}
         {ocrPreview && <img src={ocrPreview} alt="scanned" style={{ marginTop: 8, maxHeight: 100, borderRadius: 8, border: `1px solid ${c.border}`, display: "block" }} />}
       </div>
+
+      {/* Folder selector */}
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
-          <label style={{ ...s.lbl, marginBottom: 0 }}>Categories</label>
-          <button type="button" onClick={onAddCategory} style={{ ...s.btn("ghost"), padding: "3px 10px", fontSize: 12, border: `1px solid ${c.inputBorder}` }}>
-            <Ico d="M12 5v14M5 12h14" size={12} /> New Category
+          <label style={{ ...s.lbl, marginBottom: 0 }}>Folder</label>
+          <button type="button" onClick={onAddFolder} style={{ ...s.btn("ghost"), padding: "3px 10px", fontSize: 12, border: `1px solid ${c.inputBorder}` }}>
+            <Ico d="M12 5v14M5 12h14" size={12} /> New Folder
           </button>
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-          {tabs.filter(t => !t.fixed).length === 0 ? (
-            <span style={{ fontSize: 12.5, color: c.muted }}>No categories yet — add one above.</span>
-          ) : (
-            tabs.filter(t => !t.fixed).map(t => (
-              <label key={t.id} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13.5 }}>
-                <input type="checkbox" checked={form.tabs.includes(t.id)} onChange={e => setForm(f => ({ ...f, tabs: e.target.checked ? [...f.tabs, t.id] : f.tabs.filter(x => x !== t.id) }))} style={{ accentColor: c.accent, width: 15, height: 15 }} />
-                {t.label}
-              </label>
-            ))
-          )}
-        </div>
+        <select style={s.inp} value={form.folderId || ""} onChange={e => setForm(f => ({ ...f, folderId: e.target.value || null, categoryId: null }))}>
+          <option value="">No folder (Uncategorized)</option>
+          {folders.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+        </select>
       </div>
+
+      {/* Category selector — only when a folder is selected */}
+      {form.folderId && (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
+            <label style={{ ...s.lbl, marginBottom: 0 }}>Category</label>
+            <button type="button" onClick={() => onAddCategory(form.folderId)} style={{ ...s.btn("ghost"), padding: "3px 10px", fontSize: 12, border: `1px solid ${c.inputBorder}` }}>
+              <Ico d="M12 5v14M5 12h14" size={12} /> New Category
+            </button>
+          </div>
+          <select style={s.inp} value={form.categoryId || ""} onChange={e => setForm(f => ({ ...f, categoryId: e.target.value || null }))}>
+            <option value="">No category</option>
+            {categories.filter(cat => cat.folder_id === form.folderId).map(cat => <option key={cat.id} value={cat.id}>{cat.label}</option>)}
+          </select>
+        </div>
+      )}
+
       <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13.5, fontWeight: 500 }} onClick={() => setForm(f => ({ ...f, priority: !f.priority }))}>
         <Star filled={form.priority} size={17} onClick={e => e.stopPropagation()} /> Priority
       </label>

@@ -1577,7 +1577,7 @@ function NoteForm({ form, setForm, s, c, tabs, folders, categories, listening, s
       )}
 
       <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13.5, fontWeight: 500 }} onClick={() => setForm(f => ({ ...f, priority: !f.priority }))}>
-        <Star filled={form.priority} size={17} onClick={e => e.stopPropagation()} /> Priority
+        <Star filled={form.priority} size={17} onClick={e => { e.stopPropagation(); setForm(f => ({ ...f, priority: !f.priority })); }} /> Priority
       </label>
       <div>
         <label style={s.lbl}>Reminder</label>
@@ -1840,13 +1840,6 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
         {note.pinned && <span title="Pinned to top" style={{ fontSize: 13, flexShrink: 0 }}>📌</span>}
       </div>
 
-      {/* Folder/category breadcrumb */}
-      {(folderLabel || categoryLabel) && (
-        <div style={{ fontSize: 11, color: catColor || c.muted, opacity: 0.75, marginTop: -4 }}>
-          {folderLabel}{categoryLabel ? ` › ${categoryLabel}` : ""}
-        </div>
-      )}
-
       {/* CHANGE 3: body area — scrollable on hover when content overflows */}
       {editingField === "body" ? (
         <textarea autoFocus style={{ ...s.ta, fontSize: 13, minHeight: 60 }}
@@ -1903,6 +1896,11 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
           <TrashBtn title="Trash" onClick={e => { e.stopPropagation(); onTrash(); }} />
         </>)}
       </div>
+      {(folderLabel || categoryLabel) && (
+        <div style={{ fontSize: 11, color: catColor || c.muted, opacity: 0.65, paddingTop: 4 }}>
+          {folderLabel}{categoryLabel ? ` › ${categoryLabel}` : ""}
+        </div>
+      )}
     </div>
   );
 }

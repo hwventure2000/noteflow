@@ -368,6 +368,9 @@ export default function NoteApp() {
 
   const addFolder = async () => {
     if (!newFolderName.trim()) return;
+    if (folders.some(f => f.label.toLowerCase() === newFolderName.trim().toLowerCase())) {
+      alert(`A folder named "${newFolderName.trim()}" already exists.`); return;
+    }
     const { data, error } = await sb.from("folders").insert({ label: newFolderName.trim(), position: folders.length, user_id: session.user.id, color: "#7c6af7" }).select().single();
     if (error) { alert("Error creating folder: " + error.message); return; }
     if (data) setFolders(fs => [...fs, data]);
@@ -1372,6 +1375,7 @@ export default function NoteApp() {
         <div onClick={e => e.stopPropagation()} style={{ position: "fixed", top: folderContextMenu.y, left: folderContextMenu.x, background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: "4px 0", zIndex: 9999, minWidth: 180, boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
           {folderContextMenu.folder && !folderContextMenu.category && [
             { label: "✏️ Rename", action: () => { setEditingFolderId(folderContextMenu.folder.id); setEditingFolderName(folderContextMenu.folder.label); setFolderContextMenu(null); } },
+            { label: "📝 New Note here", action: () => { setActiveFolderId(folderContextMenu.folder.id); setActiveCategoryId(null); setView("all"); setForm({ title: "", body: "", priority: false, tabs: [], folderId: folderContextMenu.folder.id, categoryId: null, attachments: [], reminder: "" }); setNoteModal("new"); setFolderContextMenu(null); } },
             { label: "➕ Add Category", action: () => { setAddCategoryModal(folderContextMenu.folder.id); setNewCategoryName(""); setFolderContextMenu(null); } },
             { label: "🗑 Delete Folder", action: () => { deleteFolder(folderContextMenu.folder.id); setFolderContextMenu(null); }, danger: true },
           ].map((item, i) => (

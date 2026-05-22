@@ -368,7 +368,8 @@ export default function NoteApp() {
 
   const addFolder = async () => {
     if (!newFolderName.trim()) return;
-    const { data } = await sb.from("folders").insert({ label: newFolderName.trim(), position: folders.length, user_id: session.user.id, color: "#7c6af7" }).select().single();
+    const { data, error } = await sb.from("folders").insert({ label: newFolderName.trim(), position: folders.length, user_id: session.user.id, color: "#7c6af7" }).select().single();
+    if (error) { alert("Error creating folder: " + error.message); return; }
     if (data) setFolders(fs => [...fs, data]);
     setNewFolderName(""); setAddFolderModal(false);
   };
@@ -1008,6 +1009,10 @@ export default function NoteApp() {
           <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", color: c.accent, opacity: 0.8, cursor: "pointer", fontSize: 14 }}
             onClick={() => setAddFolderModal(true)}>
             <span>＋</span><span>Add folder</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", color: c.accent, opacity: 0.7, cursor: "pointer", fontSize: 13 }}
+            onClick={() => { setAddTabModal(true); setAddTabFromNote(false); }}>
+            <span>＋</span><span>Add category (no folder)</span>
           </div>
 
           <div style={{ height: 1, background: c.border, margin: "6px 12px" }} />

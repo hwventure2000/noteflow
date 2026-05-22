@@ -22,6 +22,13 @@ const T = {
   light: { bg: "#f2f1f8", sidebar: "#ffffff", card: "#ffffff", cardHover: "#f7f5ff", border: "#e0ddf0", text: "#1c1829", muted: "#8a87aa", accent: "#6c5ce7", accentSoft: "#ede9ff", danger: "#dc2626", success: "#6b8f72", input: "#f7f5ff", inputBorder: "#d8d4f0", tag: "#ede9ff", tagText: "#6c5ce7" },
 };
 
+const CAT_COLORS = [
+  "#4a4480","#7c6af7","#8b5cf6","#3b82f6","#06b6d4",
+  "#ef4444","#f97316","#f59e0b","#84cc16","#10b981",
+  "#ec4899","#db2777","#a855f7","#64748b","#94a3b8",
+  "#1e40af","#065f46","#92400e","#7f1d1d","#312e81",
+];
+
 function Ico({ d, size = 15, fill = "none", sw = 1.9 }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>;
 }
@@ -34,13 +41,16 @@ function Star({ filled, size = 15, onClick }) {
 }
 
 async function ocrWithClaude(base64, mediaType) {
-  const prompt = `Look at this image carefully. It may contain handwritten or typed text — either a single note/thought, or multiple distinct notes/items on a page.
-If it contains ONE note or idea, return: {"type":"single","title":"brief title","body":"full extracted text"}
-If it contains MULTIPLE distinct notes or items, return: {"type":"multi","notes":[{"title":"title","body":"text"},...]}`  ;
+  const prompt = `Look at this image carefully. It may contain handwritten or typed text — either a single note/thought, or multiple distinct notes/items on a page.\nIf it contains ONE note or idea, return: {"type":"single","title":"brief title","body":"full extracted text"}\nIf it contains MULTIPLE distinct notes or items, return: {"type":"multi","notes":[{"title":"title","body":"text"},...]}`  ;
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": import.meta.env.VITE_ANTHROPIC_KEY,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-calls": "true",
+      },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514", max_tokens: 1500,
         messages: [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }, { type: "text", text: prompt }] }],
@@ -448,17 +458,6 @@ export default function NoteApp() {
     setCategories(cats => cats.map(c => c.id === editingTabId ? { ...c, label: editingTabName.trim() } : c));
     setEditingTabId(null);
   };
-
-  const CAT_COLORS = [
-    // row 1 — purples & blues
-    "#4a4480","#7c6af7","#8b5cf6","#3b82f6","#06b6d4",
-    // row 2 — warm & vivid
-    "#ef4444","#f97316","#f59e0b","#84cc16","#10b981",
-    // row 3 — pinks & neutrals
-    "#ec4899","#db2777","#a855f7","#64748b","#94a3b8",
-    // row 4 — deep / muted
-    "#1e40af","#065f46","#92400e","#7f1d1d","#312e81",
-  ];
 
   // Uncategorized tab color — persisted in localStorage, default = Option C purple
   const [uncategorizedColor, setUncategorizedColor] = useState(() => {
@@ -1163,6 +1162,8 @@ export default function NoteApp() {
                   onSelect={() => setSelectedNoteId(note.id)}
                   onMultiSelect={e => toggleMultiSelect(note.id, e)}
                   onContextMenu={e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, note }); }}
+                  folderLabel={folders.find(f => f.id === note.folder_id)?.label}
+                  categoryLabel={categories.find(cat => cat.id === note.category_id)?.label}
                   onReorderTabs={newOrder => reorderTabs(note.id, newOrder)} />
               ))}
             </div>
@@ -1193,7 +1194,9 @@ export default function NoteApp() {
                     multiSelected={multiSelectedIds.has(note.id)}
                     onSelect={() => setSelectedNoteId(note.id)}
                     onMultiSelect={e => toggleMultiSelect(note.id, e)}
-                    onContextMenu={e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, note }); }} />
+                    onContextMenu={e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, note }); }}
+                    folderLabel={folders.find(f => f.id === note.folder_id)?.label}
+                    categoryLabel={categories.find(cat => cat.id === note.category_id)?.label} />
                 </div>
               ))}
             </div>
@@ -1233,7 +1236,7 @@ export default function NoteApp() {
 
       {/* ── scan review ── */}
       {scanReviewModal && (
-        <ScanReviewModal reviewNotes={scanReviewModal} setReviewNotes={setScanReviewModal} tabs={tabs} s={s} c={c}
+        <ScanReviewModal reviewNotes={scanReviewModal} setReviewNotes={setScanReviewModal} tabs={tabs} folders={folders} categories={categories} s={s} c={c}
           onAcceptAll={() => acceptAllScanned(scanReviewModal)}
           onAcceptOne={(note) => acceptOneScanned(note, scanReviewModal)}
           onDiscard={() => setScanReviewModal(null)} />
@@ -1605,7 +1608,7 @@ function NoteForm({ form, setForm, s, c, tabs, folders, categories, listening, s
   );
 }
 
-function ScanReviewModal({ reviewNotes, setReviewNotes, tabs, s, c, onAcceptAll, onAcceptOne, onDiscard }) {
+function ScanReviewModal({ reviewNotes, setReviewNotes, tabs, folders, categories, s, c, onAcceptAll, onAcceptOne, onDiscard }) {
   const [local, setLocal] = useState(reviewNotes);
   useEffect(() => setLocal(reviewNotes), [reviewNotes]);
   const upd = (id, field, val) => setLocal(ns => ns.map(n => n.id === id ? { ...n, [field]: val } : n));
@@ -1637,18 +1640,19 @@ function ScanReviewModal({ reviewNotes, setReviewNotes, tabs, s, c, onAcceptAll,
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <input style={s.inp} placeholder="Title…" value={note.title} onChange={e => upd(note.id, "title", e.target.value)} />
                 <textarea style={{ ...s.ta, minHeight: 56 }} placeholder="Body…" value={note.body} onChange={e => upd(note.id, "body", e.target.value)} />
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-                  <span style={{ fontSize: 11.5, color: c.muted, fontWeight: 600 }}>Category:</span>
-                  {tabs.filter(t => !t.fixed).map(t => (
-                    <label key={t.id} style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 12.5 }}>
-                      <input type="checkbox" checked={(note.tabs || []).includes(t.id)} onChange={e => upd(note.id, "tabs", e.target.checked ? [...(note.tabs || []), t.id] : (note.tabs || []).filter(x => x !== t.id))} style={{ accentColor: c.accent }} />
-                      {t.label}
-                    </label>
-                  ))}
-                  <label style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 12.5, marginLeft: "auto" }}>
-                    <Star filled={!!note.priority} size={14} onClick={() => upd(note.id, "priority", !note.priority)} /> Priority
-                  </label>
-                </div>
+                <select style={s.inp} value={note.folderId || ""} onChange={e => upd(note.id, "folderId", e.target.value || null)}>
+                  <option value="">No folder (Uncategorized)</option>
+                  {folders.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+                </select>
+                {note.folderId && (
+                  <select style={s.inp} value={note.categoryId || ""} onChange={e => upd(note.id, "categoryId", e.target.value || null)}>
+                    <option value="">No category</option>
+                    {categories.filter(cat => cat.folder_id === note.folderId).map(cat => <option key={cat.id} value={cat.id}>{cat.label}</option>)}
+                  </select>
+                )}
+                <label style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 12.5 }}>
+                  <Star filled={!!note.priority} size={14} onClick={() => upd(note.id, "priority", !note.priority)} /> Priority
+                </label>
               </div>
             </div>
           ))}
@@ -1740,7 +1744,7 @@ function DraggableTags({ tags, noteId, s, c, view, onReorderTabs }) {
 }
 
 // ── Grid Card ─────────────────────────────────────────────────────────────────
-function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, fileIcon, onEdit, onTrash, onDelete, onToggleComplete, onTogglePriority, onShare, onHistory, onRestore, onInlineSave, catColor, selected, onSelect, insertBefore, insertAfter, accentColor, multiSelected, onMultiSelect, onContextMenu, onReorderTabs }) {
+function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, fileIcon, onEdit, onTrash, onDelete, onToggleComplete, onTogglePriority, onShare, onHistory, onRestore, onInlineSave, catColor, selected, onSelect, insertBefore, insertAfter, accentColor, multiSelected, onMultiSelect, onContextMenu, onReorderTabs, folderLabel, categoryLabel }) {
   const [hover, setHover] = useState(false);
   const [editingField, setEditingField] = useState(null);
   const [draft, setDraft] = useState({ title: note.title, body: note.body });
@@ -1836,6 +1840,13 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
         {note.pinned && <span title="Pinned to top" style={{ fontSize: 13, flexShrink: 0 }}>📌</span>}
       </div>
 
+      {/* Folder/category breadcrumb */}
+      {(folderLabel || categoryLabel) && (
+        <div style={{ fontSize: 11, color: catColor || c.muted, opacity: 0.75, marginTop: -4 }}>
+          {folderLabel}{categoryLabel ? ` › ${categoryLabel}` : ""}
+        </div>
+      )}
+
       {/* CHANGE 3: body area — scrollable on hover when content overflows */}
       {editingField === "body" ? (
         <textarea autoFocus style={{ ...s.ta, fontSize: 13, minHeight: 60 }}
@@ -1897,7 +1908,7 @@ function NoteCard({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart,
 }
 
 // ── List Row ──────────────────────────────────────────────────────────────────
-function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, fileIcon, onEdit, onTrash, onDelete, onToggleComplete, onTogglePriority, onShare, onHistory, onRestore, onInlineSave, catColor, selected, onSelect, insertBefore, insertAfter, multiSelected, onMultiSelect, onContextMenu }) {
+function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd, fileIcon, onEdit, onTrash, onDelete, onToggleComplete, onTogglePriority, onShare, onHistory, onRestore, onInlineSave, catColor, selected, onSelect, insertBefore, insertAfter, multiSelected, onMultiSelect, onContextMenu, folderLabel, categoryLabel }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(note.title);
   const [rowTrashHover, setRowTrashHover] = useState(false);
@@ -1966,6 +1977,7 @@ function NoteListRow({ note, s, c, tabs, view, isDragging, isDragOver, onDragSta
             </span>
           )}
           {!editingTitle && noteTabs.map(t => <span key={t.id} style={{ ...s.tag, fontSize: 11 }}>{t.label}</span>)}
+          {!editingTitle && (folderLabel || categoryLabel) && <span style={{ fontSize: 11, color: catColor || c.muted, opacity: 0.75 }}>{folderLabel}{categoryLabel ? ` › ${categoryLabel}` : ""}</span>}
           {!editingTitle && note.attachments?.length > 0 && <span style={{ fontSize: 12, color: c.muted }}>{note.attachments.length} 📎</span>}
           {!editingTitle && note.reminder && <span style={{ fontSize: 11.5, color: c.muted }}>⏰ {new Date(note.reminder).toLocaleDateString()}</span>}
         </div>

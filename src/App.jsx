@@ -383,7 +383,11 @@ export default function NoteApp() {
     }
     const { data, error } = await sb.from("folders").insert({ label: newFolderName.trim(), position: folders.length, user_id: session.user.id, color: "#7c6af7" }).select().single();
     if (error) { alert("Error creating folder: " + error.message); return; }
-    if (data) setFolders(fs => [...fs, data]);
+    if (data) {
+      setFolders(fs => [...fs, data]);
+      // If note modal is open, auto-select this new folder
+      if (noteModal) setForm(f => ({ ...f, folderId: data.id, categoryId: null }));
+    }
     setNewFolderName(""); setAddFolderModal(false);
   };
   const renameFolder = async () => {
@@ -414,7 +418,11 @@ export default function NoteApp() {
     if (!newCategoryName.trim()) return;
     const folderCats = categories.filter(cat => cat.folder_id === folderId);
     const { data } = await sb.from("categories").insert({ label: newCategoryName.trim(), position: folderCats.length, folder_id: folderId || null, user_id: session.user.id, color: "#7c6af7" }).select().single();
-    if (data) setCategories(cs => [...cs, data]);
+    if (data) {
+      setCategories(cs => [...cs, data]);
+      // If note modal is open, auto-select this new category
+      if (noteModal) setForm(f => ({ ...f, categoryId: data.id }));
+    }
     setNewCategoryName(""); setAddCategoryModal(null);
   };
   const renameFolderCategory = async () => {
@@ -424,8 +432,10 @@ export default function NoteApp() {
     setEditingCategoryId(null);
   };
   const deleteFolderCategory = async (id) => {
+    await sb.from("notes").update({ category_id: null }).eq("category_id", id);
     await sb.from("categories").delete().eq("id", id);
     setCategories(cs => cs.filter(cat => cat.id !== id));
+    setNotes(ns => ns.map(n => n.category_id === id ? { ...n, category_id: null } : n));
     if (activeCategoryId === id) setActiveCategoryId(null);
   };
   const updateFolderCategoryColor = async (id, color) => {
@@ -1013,7 +1023,7 @@ export default function NoteApp() {
             <span>＋</span><span>Add folder</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", color: c.accent, opacity: 0.7, cursor: "pointer", fontSize: 13 }}
-            onClick={() => { setAddTabModal(true); setAddTabFromNote(false); }}>
+            onClick={() => { setAddCategoryModal("__none__"); setNewCategoryName(""); }}>
             <span>＋</span><span>Add category (no folder)</span>
           </div>
 
@@ -1030,6 +1040,35 @@ export default function NoteApp() {
           {colorPickerTarget?.type === "uncategorized" && (
             <ColorPicker current={uncategorizedColor} onSelect={saveUncategorizedColor} c={c} />
           )}
+
+          {/* Standalone categories (no folder) */}
+          {categories.filter(cat => !cat.folder_id).map(cat => {
+            const isCatActive = activeCategoryId === cat.id && !activeFolderId && view === "all";
+            return (
+              <div key={cat.id}>
+                {editingCategoryId === cat.id ? (
+                  <div style={{ padding: "3px 10px" }}>
+                    <input autoFocus style={{ ...s.inp, padding: "4px 8px", fontSize: 12 }} value={editingCategoryName}
+                      onChange={e => setEditingCategoryName(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") renameFolderCategory(); if (e.key === "Escape") setEditingCategoryId(null); }}
+                      onBlur={renameFolderCategory} />
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 12px", margin: isCatActive ? "1px 8px" : "0", borderRadius: isCatActive ? 8 : 0, background: isCatActive ? (cat.color ? cat.color + "22" : c.accentSoft) : "transparent", color: isCatActive ? (cat.color || c.accent) : c.muted, fontWeight: isCatActive ? 600 : 400, fontSize: 13, cursor: "pointer", userSelect: "none", transition: "all 0.15s" }}
+                    onClick={() => { setActiveFolderId(null); setActiveCategoryId(cat.id); setView("all"); }}
+                    onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setFolderContextMenu({ x: e.clientX, y: e.clientY, category: cat, folder: null }); }}>
+                    <span onClick={e => { e.stopPropagation(); setColorPickerTarget(colorPickerTarget?.id === cat.id ? null : { type: "category", id: cat.id }); }}
+                      style={{ width: 8, height: 8, borderRadius: "50%", background: cat.color || c.muted, flexShrink: 0, cursor: "pointer", display: "inline-block" }} />
+                    <span style={{ flex: 1 }}>{cat.label}</span>
+                    <span style={s.badge(cat.color || c.muted)}>{notes.filter(n => !n.completed && !n.trashed && n.category_id === cat.id).length}</span>
+                  </div>
+                )}
+                {colorPickerTarget?.type === "category" && colorPickerTarget?.id === cat.id && (
+                  <ColorPicker current={cat.color} onSelect={col => updateFolderCategoryColor(cat.id, col)} onReset={() => updateFolderCategoryColor(cat.id, null)} c={c} />
+                )}
+              </div>
+            );
+          })}
 
           <div style={{ height: 1, background: c.border, margin: "6px 12px" }} />
 
@@ -1363,11 +1402,12 @@ export default function NoteApp() {
         <div style={{ ...s.modal, zIndex: 300 }} onClick={() => { setAddCategoryModal(null); setNewCategoryName(""); }}>
           <div style={{ ...s.mbox, maxWidth: 320 }} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Add Category</div>
-            <div style={{ fontSize: 12, color: c.muted, marginBottom: 14 }}>in {folders.find(f => f.id === addCategoryModal)?.label}</div>
-            <input style={s.inp} placeholder="e.g. Legal, Production, Director…" value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} onKeyDown={e => e.key === "Enter" && addFolderCategory(addCategoryModal)} autoFocus />
+            {addCategoryModal !== "__none__" && <div style={{ fontSize: 12, color: c.muted, marginBottom: 14 }}>in {folders.find(f => f.id === addCategoryModal)?.label}</div>}
+            {addCategoryModal === "__none__" && <div style={{ fontSize: 12, color: c.muted, marginBottom: 14 }}>No folder (standalone category)</div>}
+            <input style={s.inp} placeholder="e.g. Legal, Production, Director…" value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} onKeyDown={e => e.key === "Enter" && addFolderCategory(addCategoryModal === "__none__" ? null : addCategoryModal)} autoFocus />
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
               <button style={s.btn("ghost")} onClick={() => { setAddCategoryModal(null); setNewCategoryName(""); }}>Cancel</button>
-              <button style={s.btn("primary")} onClick={() => addFolderCategory(addCategoryModal)}>Add</button>
+              <button style={s.btn("primary")} onClick={() => addFolderCategory(addCategoryModal === "__none__" ? null : addCategoryModal)}>Add</button>
             </div>
           </div>
         </div>

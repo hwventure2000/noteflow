@@ -737,25 +737,28 @@ export default function NoteApp() {
   }, [notes, session]);
 
   // ── Daily inspirational quote at 6am ──
+  const fetchQuote = async (random = false) => {
+    try {
+      const endpoint = random ? "https://zenquotes.io/api/random" : "https://zenquotes.io/api/today";
+      const res = await fetch("https://api.allorigins.win/get?url=" + encodeURIComponent(endpoint));
+      const data = await res.json();
+      const quotes = JSON.parse(data.contents);
+      if (quotes && quotes[0]) {
+        setQuoteModal({ text: quotes[0].q, author: quotes[0].a });
+        if (!random) localStorage.setItem("nf_quote_date", new Date().toDateString());
+      }
+    } catch (e) { }
+  };
+
   useEffect(() => {
     if (!session) return;
-    const fetchAndShowQuote = async () => {
-      try {
-        const today = new Date().toDateString();
-        const lastShown = localStorage.getItem("nf_quote_date");
-        if (lastShown === today) return; // already shown today
-        const res = await fetch("https://api.allorigins.win/get?url=" + encodeURIComponent("https://zenquotes.io/api/today"));
-        const data = await res.json();
-        const quotes = JSON.parse(data.contents);
-        if (quotes && quotes[0]) {
-          setQuoteModal({ text: quotes[0].q, author: quotes[0].a });
-          localStorage.setItem("nf_quote_date", today);
-        }
-      } catch (e) { }
-    };
     const checkTime = () => {
       const now = new Date();
-      if (now.getHours() >= 6) fetchAndShowQuote();
+      if (now.getHours() >= 6) {
+        const today = new Date().toDateString();
+        const lastShown = localStorage.getItem("nf_quote_date");
+        if (lastShown !== today) fetchQuote(false);
+      }
     };
     checkTime();
     const interval = setInterval(checkTime, 60000);
@@ -1121,6 +1124,9 @@ export default function NoteApp() {
             Import .ics (Apple)
             <input type="file" accept=".ics" style={{ display: "none" }} onChange={e => { if (e.target.files[0]) importIcsFile(e.target.files[0]); e.target.value = ""; }} />
           </label>
+          <button style={{ ...s.btn("ghost"), width: "100%", justifyContent: "center", fontSize: 12 }} onClick={() => fetchQuote(true)}>
+            ✨ Get Inspired
+          </button>
           <button style={{ ...s.btn("ghost"), width: "100%", justifyContent: "center", fontSize: 12 }} onClick={() => setDark(d => !d)}>
             <Ico d={dark ? "M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42M12 5a7 7 0 100 14A7 7 0 0012 5z" : "M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"} />
             {dark ? "Light mode" : "Dark mode"}
@@ -1556,6 +1562,9 @@ export default function NoteApp() {
             <div style={{ fontSize: 12, fontWeight: 700, color: c.accent, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 16 }}>✨ Daily Inspiration</div>
             <p style={{ fontSize: 19, lineHeight: 1.65, color: c.text, margin: "0 0 18px", fontStyle: "italic", fontFamily: "Georgia, serif" }}>"{quoteModal.text}"</p>
             <p style={{ fontSize: 13, color: c.muted, margin: 0 }}>— {quoteModal.author}</p>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
+              <button style={s.btn("ghost")} onClick={() => fetchQuote(true)}>✨ New Quote</button>
+            </div>
           </div>
         </div>
       )}

@@ -739,15 +739,40 @@ export default function NoteApp() {
   // ── Daily inspirational quote at 6am ──
   const fetchQuote = async (random = false) => {
     try {
-      const endpoint = random ? "https://zenquotes.io/api/random" : "https://zenquotes.io/api/today";
-      const res = await fetch("https://api.allorigins.win/get?url=" + encodeURIComponent(endpoint));
-      const data = await res.json();
-      const quotes = JSON.parse(data.contents);
-      if (quotes && quotes[0]) {
-        setQuoteModal({ text: quotes[0].q, author: quotes[0].a });
-        if (!random) localStorage.setItem("nf_quote_date", new Date().toDateString());
+      // quotable.io — free, 1500+ quotes, CORS enabled
+      const res = await fetch("https://api.quotable.io/random?maxLength=200");
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.content) {
+          setQuoteModal({ text: data.content, author: data.author });
+          if (!random) localStorage.setItem("nf_quote_date", new Date().toDateString());
+          return;
+        }
       }
     } catch (e) { }
+    try {
+      // Backup: forismatic.com — also free, thousands of quotes
+      const res = await fetch("https://api.forismatic.com/api/1.0/?method=getQuote&format=json&lang=en");
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.quoteText) {
+          setQuoteModal({ text: data.quoteText.trim(), author: data.quoteAuthor?.trim() || "Unknown" });
+          if (!random) localStorage.setItem("nf_quote_date", new Date().toDateString());
+          return;
+        }
+      }
+    } catch (e) { }
+    // Final fallback
+    const fallbacks = [
+      { text: "It always seems impossible until it's done.", author: "Nelson Mandela" },
+      { text: "The greatest glory in living lies not in never falling, but in rising every time we fall.", author: "Nelson Mandela" },
+      { text: "Education is the most powerful weapon which you can use to change the world.", author: "Nelson Mandela" },
+      { text: "In the middle of every difficulty lies opportunity.", author: "Albert Einstein" },
+      { text: "The secret of getting ahead is getting started.", author: "Mark Twain" },
+    ];
+    const q = fallbacks[Math.floor(Math.random() * fallbacks.length)];
+    setQuoteModal({ text: q.text, author: q.author });
+    if (!random) localStorage.setItem("nf_quote_date", new Date().toDateString());
   };
 
   useEffect(() => {

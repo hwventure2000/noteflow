@@ -1548,7 +1548,6 @@ export default function NoteApp() {
           )}
         </div>
       )}
-    </div>
 
       {/* ── Daily quote modal ── */}
       {quoteModal && (
@@ -1566,6 +1565,7 @@ export default function NoteApp() {
           </div>
         </div>
       )}
+    </div>
   );
 }
 

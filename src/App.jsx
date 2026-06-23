@@ -269,6 +269,7 @@ export default function NoteApp() {
   const [shareModal, setShareModal] = useState(null);
   const [historyModal, setHistoryModal] = useState(null);
   const [reminderAlerts, setReminderAlerts] = useState([]);
+  const [quoteModal, setQuoteModal] = useState(null); // {text, author}
   const [gcalModal, setGcalModal] = useState(false);
   const [gcalEvents, setGcalEvents] = useState([]);
   const [gcalLoading, setGcalLoading] = useState(false);
@@ -735,6 +736,35 @@ export default function NoteApp() {
     return () => clearInterval(interval);
   }, [notes, session]);
 
+  // ── Daily inspirational quote at 6am ──
+  const fetchQuote = async (random = false) => {
+    try {
+      const endpoint = random ? "https://zenquotes.io/api/random" : "https://zenquotes.io/api/today";
+      const res = await fetch("https://api.allorigins.win/get?url=" + encodeURIComponent(endpoint));
+      const data = await res.json();
+      const quotes = JSON.parse(data.contents);
+      if (quotes && quotes[0]) {
+        setQuoteModal({ text: quotes[0].q, author: quotes[0].a });
+        if (!random) localStorage.setItem("nf_quote_date", new Date().toDateString());
+      }
+    } catch (e) { }
+  };
+
+  useEffect(() => {
+    if (!session) return;
+    const checkTime = () => {
+      const now = new Date();
+      if (now.getHours() >= 6) {
+        const today = new Date().toDateString();
+        const lastShown = localStorage.getItem("nf_quote_date");
+        if (lastShown !== today) fetchQuote(false);
+      }
+    };
+    checkTime();
+    const interval = setInterval(checkTime, 60000);
+    return () => clearInterval(interval);
+  }, [session]);
+
   const generateLink = async (id) => {
     const link = `${window.location.origin}/shared/${id}?token=${uid()}`;
     await sb.from("notes").update({ share_link: link }).eq("id", id);
@@ -1122,6 +1152,7 @@ export default function NoteApp() {
           <button style={{ ...s.btn("ghost"), padding: "6px 10px" }} onClick={() => setViewMode(v => v === "grid" ? "list" : "grid")}>
             <Ico d={viewMode === "grid" ? "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" : "M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"} />
           </button>
+          {view === "all" && <button style={{ ...s.btn("ghost"), padding: "7px 13px" }} onClick={() => fetchQuote(true)}>✨ Get Inspired</button>}
           {view === "all" && <button style={s.btn("primary")} onClick={openNew}><Ico d="M12 5v14M5 12h14" /> New Note</button>}
           {view === "trash" && sorted.length > 0 && (
             <button style={s.btn("danger")} onClick={() => { if (window.confirm(`Permanently delete all ${sorted.length} notes in trash?`)) emptyTrash(); }}>
@@ -1518,6 +1549,23 @@ export default function NoteApp() {
         </div>
       )}
     </div>
+
+      {/* ── Daily quote modal ── */}
+      {quoteModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 9998, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+          onClick={() => setQuoteModal(null)}>
+          <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 18, padding: "32px 36px", width: "100%", maxWidth: 460, position: "relative" }}
+            onClick={e => e.stopPropagation()}>
+            <button onClick={() => setQuoteModal(null)} style={{ position: "absolute", top: 14, right: 16, background: "none", border: "none", cursor: "pointer", color: c.muted, fontSize: 18, lineHeight: 1 }}>✕</button>
+            <div style={{ fontSize: 12, fontWeight: 700, color: c.accent, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 16 }}>✨ Daily Inspiration</div>
+            <p style={{ fontSize: 19, lineHeight: 1.65, color: c.text, margin: "0 0 18px", fontStyle: "italic", fontFamily: "Georgia, serif" }}>"{quoteModal.text}"</p>
+            <p style={{ fontSize: 13, color: c.muted, margin: 0 }}>— {quoteModal.author}</p>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
+              <button style={s.btn("ghost")} onClick={() => fetchQuote(true)}>✨ New Quote</button>
+            </div>
+          </div>
+        </div>
+      )}
   );
 }
 
